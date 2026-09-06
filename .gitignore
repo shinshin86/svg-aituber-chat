@@ -1,0 +1,20 @@
+# Dependencies, build output, and tool caches
+node_modules/
+dist/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Local configuration and environment secrets
+*.local
+.env
+.env.*
+!.env.example
+
+# Logs and operating-system files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
