@@ -5,7 +5,7 @@ import type { AvatarSettings } from '../types/settings';
 
 interface AvatarController {
   counts: unknown;
-  setVoiceLevel: (value: number, isSpeaking: boolean) => void;
+  setVoiceLevel: (value: number, isSpeaking: boolean, mouthWidth?: number) => void;
   setEmotion: (emotion: string) => void;
   setOptions: (options: Record<string, number | boolean>) => void;
   setEffects: (settings: AvatarSettings) => void;
@@ -16,12 +16,13 @@ interface AvatarController {
 interface SvgAvatarProps {
   settings: AvatarSettings;
   mouthOpen: number;
+  mouthWidth: number;
   isSpeaking: boolean;
   emotion: string;
   effectReplayToken: number;
 }
 
-export function SvgAvatar({ settings, mouthOpen, isSpeaking, emotion, effectReplayToken }: SvgAvatarProps) {
+export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, emotion, effectReplayToken }: SvgAvatarProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AvatarController | null>(null);
   const latestSettingsRef = useRef(settings);
@@ -69,8 +70,8 @@ export function SvgAvatar({ settings, mouthOpen, isSpeaking, emotion, effectRepl
   }, []);
 
   useEffect(() => {
-    controllerRef.current?.setVoiceLevel(mouthOpen, isSpeaking);
-  }, [isSpeaking, mouthOpen]);
+    controllerRef.current?.setVoiceLevel(mouthOpen, isSpeaking, mouthWidth);
+  }, [isSpeaking, mouthOpen, mouthWidth]);
 
   useEffect(() => {
     controllerRef.current?.setOptions({

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { estimateMouthShape } from '../lib/lipsync';
 
 const SMOOTH_FACTOR = 0.48;
 const RMS_FLOOR = 0.008;
@@ -8,11 +9,13 @@ export function useAudioLipsync() {
   const [mouthOpen, setMouthOpen] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [rms, setRms] = useState(0);
+  const [mouthWidth, setMouthWidth] = useState(1);
   const contextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef(0);
   const smoothedRef = useRef(0);
+  const widthRef = useRef(1);
 
   const getContext = useCallback(() => {
     if (!contextRef.current || contextRef.current.state === 'closed') {
@@ -26,7 +29,9 @@ export function useAudioLipsync() {
     animationRef.current = 0;
     analyserRef.current = null;
     smoothedRef.current = 0;
+    widthRef.current = 1;
     setMouthOpen(0);
+    setMouthWidth(1);
     setRms(0);
     setIsSpeaking(false);
   }, []);
@@ -71,10 +76,12 @@ export function useAudioLipsync() {
       setIsSpeaking(true);
 
       const samples = new Float32Array(analyser.fftSize);
+      const frequencies = new Float32Array(analyser.frequencyBinCount);
       const tick = () => {
         const currentAnalyser = analyserRef.current;
         if (!currentAnalyser || sourceRef.current !== source) return;
         currentAnalyser.getFloatTimeDomainData(samples);
+        currentAnalyser.getFloatFrequencyData(frequencies);
         let sumSquares = 0;
         for (const sample of samples) sumSquares += sample * sample;
         const currentRms = Math.sqrt(sumSquares / samples.length);
@@ -85,8 +92,13 @@ export function useAudioLipsync() {
           1,
         );
         const naturalOpen = Math.pow(normalized, 0.68);
+        const shape = estimateMouthShape(frequencies, context.sampleRate, currentAnalyser.fftSize);
         setRms(smoothedRef.current);
-        setMouthOpen(naturalOpen);
+        const activity = Math.min(Math.max((normalized - 0.05) / 0.2, 0), 1);
+        const widthTarget = 1 + (shape.width - 1) * activity;
+        widthRef.current = widthRef.current * 0.5 + widthTarget * 0.5;
+        setMouthOpen(Math.min(naturalOpen * (0.9 + shape.open * 0.1), 1));
+        setMouthWidth(widthRef.current);
         animationRef.current = requestAnimationFrame(tick);
       };
       animationRef.current = requestAnimationFrame(tick);
@@ -114,5 +126,5 @@ export function useAudioLipsync() {
     };
   }, [stop]);
 
-  return { mouthOpen, isSpeaking, rms, play, stop, unlock };
+  return { mouthOpen, mouthWidth, isSpeaking, rms, play, stop, unlock };
 }

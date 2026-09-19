@@ -83,13 +83,14 @@ export default function App() {
     const debugWindow = window as typeof window & {
       __svgAituberTest?: {
         playTestAudio: () => Promise<void>;
-        getAudioState: () => { mouthOpen: number; isSpeaking: boolean; rms: number };
+        getAudioState: () => { mouthOpen: number; mouthWidth: number; isSpeaking: boolean; rms: number };
       };
     };
     debugWindow.__svgAituberTest = {
       playTestAudio: voiceTest.testVoice,
       getAudioState: () => ({
         mouthOpen: audio.mouthOpen,
+        mouthWidth: audio.mouthWidth,
         isSpeaking: audio.isSpeaking,
         rms: audio.rms,
       }),
@@ -97,7 +98,7 @@ export default function App() {
     return () => {
       delete debugWindow.__svgAituberTest;
     };
-  }, [audio.isSpeaking, audio.mouthOpen, audio.rms, voiceTest.testVoice]);
+  }, [audio.isSpeaking, audio.mouthOpen, audio.mouthWidth, audio.rms, voiceTest.testVoice]);
 
   const llmLabel =
     LLM_PROVIDERS.find((item) => item.value === settingsState.settings.llm.provider)?.label ??
@@ -136,6 +137,7 @@ export default function App() {
         <SvgAvatar
           settings={settingsState.settings.avatar}
           mouthOpen={audio.mouthOpen}
+          mouthWidth={audio.mouthWidth}
           isSpeaking={audio.isSpeaking}
           emotion={core.emotion}
           effectReplayToken={avatarEffectReplayToken}

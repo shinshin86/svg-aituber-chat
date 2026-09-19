@@ -17,6 +17,7 @@
  *   ?debug=1      Show region boundaries
  *   ?mx=0.5&my=-0.3  Freeze the pointer position (-1..1)
  *   ?mouth=0.3    Freeze mouth openness (0=closed, 1=original artwork)
+ *   ?mouthw=1.25  Freeze mouth width (0.75..1.25)
  *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
  *   ?amp=0        Override the motion amplitude
  *   ?flat=1       Render the original SVG without splitting it
@@ -58,6 +59,7 @@ const state = {
   amp: params.has('amp') ? parseFloat(params.get('amp')) : 1, speed: 1,
   isSpeaking: false,
   audioMouthOpen: 0,
+  audioMouthWidth: params.has('mouthw') ? parseFloat(params.get('mouthw')) : 1,
   mouse: { x: parseFloat(params.get('mx') || '0'), y: parseFloat(params.get('my') || '0') },
   fixedT: params.has('t') ? parseFloat(params.get('t')) : null,
   forceBlink: params.has('blink'),
@@ -868,9 +870,10 @@ function startAnimation(parts, paths, expressionController) {
     if (state.forceMouth !== null) open = state.forceMouth;
     else if (state.isSpeaking) open = state.audioMouthOpen;
     const RM = CFG.regions.mouth;
-    setT(parts.mouth, scaleAbout(mouthc.x, RM.y1 + 8, 1, Math.max(open, 0.0001)));
+    const mouthWidth = Math.min(Math.max(Number(state.audioMouthWidth) || 1, .75), 1.25);
+    setT(parts.mouth, scaleAbout(mouthc.x, RM.y1 + 8, mouthWidth, Math.max(open, 0.0001)));
     const lipS = Math.max(1 - open, 0.0001);
-    setT(parts.mouthLip, scaleAbout((RM.x1 + RM.x2) / 2, RM.y2 + 10, 1, lipS));
+    setT(parts.mouthLip, scaleAbout((RM.x1 + RM.x2) / 2, RM.y2 + 10, mouthWidth, lipS));
     setVis(parts.mouthLip, open < 0.98);
     // Fade the closed-mouth line out as openness moves from 0 to 0.2.
     const lipLine = parts.mouthLip[0].querySelector('[data-line]');
@@ -922,10 +925,14 @@ export async function createSvgAvatar(container, srcUrl) {
 
   const controller = {
     counts,
-    setVoiceLevel(value, isSpeaking) {
+    setVoiceLevel(value, isSpeaking, mouthWidth) {
       state.audioMouthOpen = Math.min(Math.max(Number(value) || 0, 0), 1);
+      if (!params.has('mouthw') && mouthWidth !== undefined) state.audioMouthWidth = Number(mouthWidth) || 1;
       state.isSpeaking = Boolean(isSpeaking);
-      if (!state.isSpeaking) state.audioMouthOpen = 0;
+      if (!state.isSpeaking) {
+        state.audioMouthOpen = 0;
+        state.audioMouthWidth = params.has('mouthw') ? state.audioMouthWidth : 1;
+      }
       effectController.setAudioLevel(state.audioMouthOpen, state.isSpeaking);
     },
     setEmotion(value) {
