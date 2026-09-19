@@ -70,6 +70,7 @@ export interface StreamSettings {
   youtubeEnabled: boolean;
   youtubeCommentIntervalMs: number;
   playAvatarEffectOnComment: boolean;
+  commentReactions: boolean;
 }
 
 export type AvatarVisualMode = 'normal' | 'monochrome' | 'lineArt' | 'neon' | 'poster';

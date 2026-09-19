@@ -23,10 +23,11 @@ import { rotateHue } from '../lib/avatarColor';
  *   ?gesture=nod|tilt|jump|laugh&gt=0.35  Freeze a gesture pose
  *   ?thinking=1    Freeze the thinking gaze
  *   ?outline=sticker  Enable the sticker white border
- *   ?rim=1&visual=poster&aura=1&shadow=1  Enable T4 effects
+ *   ?rim=1&visual=poster&aura=1&shadow=1  Enable filter effects
  *   ?reveal=dissolve&rp=0.5  Freeze dissolve progress
- *   ?hue=120&particles=heart&pt=0.5&backdrop=focusLines  Freeze T5 effects
+ *   ?hue=120&particles=heart&pt=0.5&backdrop=focusLines  Freeze hue, particle, and backdrop effects
  *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
+ *   ?comment=cute  Trigger one comment keyword reaction after startup
  *   ?amp=0        Override the motion amplitude
  *   ?flat=1       Render the original SVG without splitting it
  */
@@ -760,6 +761,7 @@ function createExpressionController(expressionRefs, initialEmotion = 'neutral') 
   let frameId = 0;
 
   const render = () => {
+    for (const emotion of EMOTIONS) weights[emotion] = Math.max(0, Math.min(weights[emotion], 1));
     for (const emotion of EMOTIONS) {
       expressionRefs.groups[emotion].style.opacity = String(weights[emotion]);
       const mark = expressionRefs.markGroups[emotion];
@@ -812,16 +814,20 @@ function createExpressionController(expressionRefs, initialEmotion = 'neutral') 
     current = target;
     target = next;
     const start = { ...weights };
-    const startedAt = performance.now();
+    let startedAt = null;
     const transition = (now) => {
-      const progress = Math.min((now - startedAt) / 220, 1);
+      if (startedAt === null) startedAt = now;
+      const progress = Math.min(Math.max((now - startedAt) / 220, 0), 1);
       const eased = 1 - Math.pow(1 - progress, 3);
       for (const emotion of EMOTIONS) {
         weights[emotion] = start[emotion] * (1 - eased) + (emotion === target ? eased : 0);
       }
+      if (progress >= 1) {
+        for (const emotion of EMOTIONS) weights[emotion] = emotion === target ? 1 : 0;
+        current = target;
+      }
       render();
       if (progress < 1) frameId = requestAnimationFrame(transition);
-      else current = target;
     };
     frameId = requestAnimationFrame(transition);
   };
@@ -922,9 +928,10 @@ function createEffectController(svg, effects) {
       effects.particleGroup.append(node);
       return { node, startX, startY, endX, endY, spin: (i % 2 ? 1 : -1) * (180 + i * 7), duration: 1200 + (i % 7) * 100, delay: (i % 6) * 35 };
     });
-    const started = performance.now();
+    let started = null;
     const fixedProgress = params.has('pt') ? clamp(params.get('pt'), 0, 1) : null;
     const frame = (now) => {
+      if (started === null) started = now;
       const elapsed = now - started;
       let active = false;
       particles.forEach((particle) => {
@@ -1029,10 +1036,11 @@ function createEffectController(svg, effects) {
 
   const animate = (duration, update, complete) => {
     const runId = ++revealRunId;
-    const startedAt = performance.now();
+    let startedAt = null;
     const frame = (now) => {
       if (runId !== revealRunId) return;
-      const progress = Math.min((now - startedAt) / duration, 1);
+      if (startedAt === null) startedAt = now;
+      const progress = Math.min(Math.max((now - startedAt) / duration, 0), 1);
       const eased = 1 - Math.pow(1 - progress, 3);
       update(eased, progress);
       if (progress < 1) revealFrameId = requestAnimationFrame(frame);

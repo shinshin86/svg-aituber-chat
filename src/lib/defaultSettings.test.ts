@@ -22,6 +22,7 @@ describe('avatar advanced effect settings', () => {
     expect(settings.avatar.backdrop).toBe('none');
     expect(settings.stream.youtubeEnabled).toBe(false);
     expect(settings.stream.youtubeCommentIntervalMs).toBe(20_000);
+    expect(settings.stream.commentReactions).toBe(true);
   });
 
   it('keeps saved advanced effect choices', () => {
@@ -51,6 +52,7 @@ describe('avatar advanced effect settings', () => {
     expect(settings.stream.youtubeLiveId).toBe('example-live-id');
     expect(settings.stream.youtubeCommentIntervalMs).toBe(30_000);
     expect(settings.stream.playAvatarEffectOnComment).toBe(true);
+    expect(settings.stream.commentReactions).toBe(true);
     expect(settings.stream.youtubeEnabled).toBe(false);
   });
 });

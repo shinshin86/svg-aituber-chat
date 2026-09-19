@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import avatarUrl from '../../miko.svg?url';
 import { createSvgAvatar } from '../avatar/createSvgAvatar.js';
 import type { AvatarSettings } from '../types/settings';
+import type { CommentReaction } from '../lib/commentReactions';
 
 interface AvatarController {
   counts: unknown;
@@ -16,6 +17,10 @@ interface AvatarController {
   destroy: () => void;
 }
 
+export interface CommentReactionEvent extends CommentReaction {
+  token: number;
+}
+
 interface SvgAvatarProps {
   settings: AvatarSettings;
   mouthOpen: number;
@@ -24,11 +29,14 @@ interface SvgAvatarProps {
   thinking: boolean;
   emotion: string;
   effectReplayToken: number;
+  commentReaction: CommentReactionEvent | null;
 }
 
-export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinking, emotion, effectReplayToken }: SvgAvatarProps) {
+export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinking, emotion, effectReplayToken, commentReaction }: SvgAvatarProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AvatarController | null>(null);
+  const commentReactionTimerRef = useRef<number | null>(null);
+  const [controllerReady, setControllerReady] = useState(0);
   const latestSettingsRef = useRef(settings);
   const [loadError, setLoadError] = useState('');
   latestSettingsRef.current = settings;
@@ -46,6 +54,7 @@ export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinkin
         }
         controller = result;
         controllerRef.current = result;
+        setControllerReady((current) => current + 1);
         const currentSettings = latestSettingsRef.current;
         result.setOptions({
           amp: currentSettings.amplitude,
@@ -70,6 +79,7 @@ export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinkin
     return () => {
       active = false;
       controller?.destroy();
+      if (commentReactionTimerRef.current !== null) window.clearTimeout(commentReactionTimerRef.current);
       if (controllerRef.current === controller) controllerRef.current = null;
     };
   }, []);
@@ -95,8 +105,25 @@ export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinkin
   }, [settings]);
 
   useEffect(() => {
+    if (commentReactionTimerRef.current !== null) window.clearTimeout(commentReactionTimerRef.current);
     controllerRef.current?.setEmotion(emotion);
   }, [emotion]);
+
+  useEffect(() => {
+    if (!commentReaction || !controllerReady) return;
+    const controller = controllerRef.current;
+    if (!controller) return;
+    if (commentReactionTimerRef.current !== null) window.clearTimeout(commentReactionTimerRef.current);
+    if (commentReaction.emotion) controller.setEmotion(commentReaction.emotion);
+    if (commentReaction.gesture) controller.playGesture(commentReaction.gesture);
+    if (commentReaction.particles) controller.playParticles(commentReaction.particles);
+    if (commentReaction.emotion) {
+      commentReactionTimerRef.current = window.setTimeout(() => {
+        controllerRef.current?.setEmotion('neutral');
+        commentReactionTimerRef.current = null;
+      }, 2500);
+    }
+  }, [commentReaction, controllerReady]);
 
   useEffect(() => {
     controllerRef.current?.setThinking(thinking);

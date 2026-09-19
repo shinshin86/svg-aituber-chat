@@ -92,6 +92,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     youtubeEnabled: false,
     youtubeCommentIntervalMs: 20_000,
     playAvatarEffectOnComment: true,
+    commentReactions: true,
   },
 };
 

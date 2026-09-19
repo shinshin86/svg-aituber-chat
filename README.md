@@ -12,8 +12,12 @@
 - Speak replies with the supported TTS engines
 - Drive the avatar's mouth from the actual audio signal
 - Animate blinking, breathing, head movement, and hair movement
+- Switch eyes, eyebrows, mouth, blush, and emotion marks to match the reply emotion (happy, sad, angry, surprised)
+- Play gestures such as a nod, head tilt, or jump, and look up while the LLM is thinking
 - Apply SVG-native visual effects such as line art, neon, glitch, distortion, and reveal animations
+- Add a sticker outline, rim light, poster look, aura, drop shadow, hair hue shift, particles, and focus-line or halftone backdrops
 - Receive YouTube Live comments and reply to them in sequence
+- Trigger avatar reactions from comment keywords such as `cute`, `888`, and `lol`
 - Collapse the control panel for a clean streaming view
 
 ## Getting started
@@ -39,6 +43,29 @@ The center arrow button or the `Esc` key collapses the control panel so that the
 The app keeps up to 50 comments in its queue. If the LLM is processing a response or audio is playing, later comments wait and are handled in order. The avatar can also replay the selected entrance effect when it starts replying to a comment.
 
 The YouTube integration adapts the structure and behavior of the [AITuber OnAir React PSD example](https://github.com/shinshin86/aituber-onair/tree/main/packages/core/examples/react-psd-app).
+
+When **コメントのキーワードに反応する (React to comment keywords)** is enabled in the streaming settings, the avatar reacts to words in a comment. For example, `cute` releases hearts, `888` shows clap marks, and `lol` plays a laughing gesture.
+
+## URL parameters for checking expressions and effects
+
+Add parameters to the URL to freeze an expression or effect without configuring an LLM or TTS engine. Combine several with `&`.
+
+| Parameter | Description |
+| --- | --- |
+| `?emotion=happy` | Freeze the expression: `happy`, `sad`, `angry`, `surprised`, `relaxed`, or `neutral`. |
+| `?mouth=0.7&mouthw=1.25` | Freeze the mouth opening (0 to 1) and width (0.75 to 1.25). |
+| `?gesture=nod&gt=0.35` | Hold a gesture (`nod`, `tilt`, `jump`, `laugh`) at a progress from 0 to 1. |
+| `?thinking=1` | Show the thinking gaze. |
+| `?outline=sticker`, `?rim=1`, `?aura=1`, `?shadow=1` | Show the sticker outline, rim light, aura, or drop shadow. |
+| `?visual=poster` | Use the poster look. |
+| `?reveal=dissolve&rp=0.5` | Hold the entrance effect at a progress from 0 to 1. |
+| `?hue=120` | Rotate the hair hue between -180 and 180 degrees. |
+| `?particles=heart&pt=0.5` | Hold particles (`heart`, `star`, `petal`, `clap`) at a progress from 0 to 1. |
+| `?backdrop=focusLines` | Show focus lines (`focusLines`) or halftone dots (`halftone`) behind the avatar. |
+| `?comment=cute` | React once to the given text as a comment, one second after startup. |
+| `?bg=dark` | Choose the background: `white`, `dark`, or `green`. |
+| `?t=1.5&mx=0&my=0` | Freeze the animation time and pointer position. |
+| `?blink=1`, `?debug=1`, `?flat=1` | Freeze mid-blink, show region boundaries, or render the original SVG without splitting it. |
 
 ## Voice and lip-sync test
 
