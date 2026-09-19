@@ -6,6 +6,7 @@ import type { AvatarSettings } from '../types/settings';
 interface AvatarController {
   counts: unknown;
   setVoiceLevel: (value: number, isSpeaking: boolean) => void;
+  setEmotion: (emotion: string) => void;
   setOptions: (options: Record<string, number | boolean>) => void;
   setEffects: (settings: AvatarSettings) => void;
   replayReveal: () => void;
@@ -16,10 +17,11 @@ interface SvgAvatarProps {
   settings: AvatarSettings;
   mouthOpen: number;
   isSpeaking: boolean;
+  emotion: string;
   effectReplayToken: number;
 }
 
-export function SvgAvatar({ settings, mouthOpen, isSpeaking, effectReplayToken }: SvgAvatarProps) {
+export function SvgAvatar({ settings, mouthOpen, isSpeaking, emotion, effectReplayToken }: SvgAvatarProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AvatarController | null>(null);
   const latestSettingsRef = useRef(settings);
@@ -49,6 +51,7 @@ export function SvgAvatar({ settings, mouthOpen, isSpeaking, effectReplayToken }
           blink: currentSettings.blink,
           mouseFollow: currentSettings.mouseFollow,
           debug: currentSettings.debug,
+          emotionSync: currentSettings.emotionSync,
         });
         result.setEffects(currentSettings);
         setLoadError('');
@@ -79,9 +82,14 @@ export function SvgAvatar({ settings, mouthOpen, isSpeaking, effectReplayToken }
       blink: settings.blink,
       mouseFollow: settings.mouseFollow,
       debug: settings.debug,
+      emotionSync: settings.emotionSync,
     });
     controllerRef.current?.setEffects(settings);
   }, [settings]);
+
+  useEffect(() => {
+    controllerRef.current?.setEmotion(emotion);
+  }, [emotion]);
 
   useEffect(() => {
     if (effectReplayToken > 0) controllerRef.current?.replayReveal();

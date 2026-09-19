@@ -17,6 +17,7 @@
  *   ?debug=1      Show region boundaries
  *   ?mx=0.5&my=-0.3  Freeze the pointer position (-1..1)
  *   ?mouth=0.3    Freeze mouth openness (0=closed, 1=original artwork)
+ *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
  *   ?amp=0        Override the motion amplitude
  *   ?flat=1       Render the original SVG without splitting it
  */
@@ -28,6 +29,8 @@ const CFG = {
   regions: {
     eyeL:  { x1: 1018, y1: 480, x2: 1190, y2: 650 },
     eyeR:  { x1: 1280, y1: 455, x2: 1470, y2: 640 },
+    browL: { x1: 1000, y1: 360, x2: 1200, y2: 470 },
+    browR: { x1: 1260, y1: 350, x2: 1485, y2: 455 },
     mouth: { x1: 1140, y1: 690, x2: 1320, y2: 800 },
     face:  { x1: 1020, y1: 380, x2: 1480, y2: 830 }, // Paths fully inside this region are not classified as hair
   },
@@ -47,6 +50,9 @@ const CFG = {
 };
 
 const params = new URLSearchParams(location.search);
+const EMOTIONS = ['happy', 'sad', 'angry', 'surprised', 'relaxed', 'neutral'];
+const EMOTION_MOODS = { happy: 'happy', sad: 'calm', angry: 'dramatic', surprised: 'dramatic', relaxed: 'dreamy', neutral: 'neutral' };
+const normalizeEmotion = (value) => EMOTIONS.includes(String(value).toLowerCase()) ? String(value).toLowerCase() : 'neutral';
 const state = {
   flags: { breath: true, headSway: true, hairSway: true, blink: true, mouseFollow: true, debug: params.has('debug') },
   amp: params.has('amp') ? parseFloat(params.get('amp')) : 1, speed: 1,
@@ -56,6 +62,7 @@ const state = {
   fixedT: params.has('t') ? parseFloat(params.get('t')) : null,
   forceBlink: params.has('blink'),
   forceMouth: params.has('mouth') ? parseFloat(params.get('mouth')) : null, // 0=closed, 1=original artwork
+  emotion: normalizeEmotion(params.get('emotion')),
   flat: params.has('flat'), // Render the original SVG without region splitting
   nextBlinkAt: 1.5, blinkStart: -1,
 };
@@ -150,6 +157,11 @@ const MOOD_MATRICES = {
   dramatic: '1.22 -0.08 -0.05 0 -0.03  -0.05 1.13 -0.05 0 -0.01  -0.04 -0.05 1.18 0 -0.02  0 0 0 1 0',
   dreamy: '1.02 0.04 0.08 0 0.02  0.02 0.96 0.08 0 0.01  0.08 0.02 1.08 0 0.03  0 0 0 1 0',
 };
+const blendMoodMatrix = (values, amount = .5) => values.split(/\s+/).map((value, index) => {
+  const target = Number(value);
+  const identity = [0, 6, 12, 18].includes(index) ? 1 : 0;
+  return (identity + (target - identity) * amount).toFixed(4);
+}).join(' ');
 
 function appendEffectDefinitions(defs, W, H) {
   const filterBox = { filterUnits: 'userSpaceOnUse', x: -120, y: -120, width: W + 240, height: H + 240 };
@@ -273,7 +285,11 @@ function build({ W, H, paths }) {
   const effectRefs = appendEffectDefinitions(defs, W, H);
   svg.append(defs);
 
-  const clone = (p) => p.node.cloneNode(true);
+  const clone = (p) => {
+    const node = p.node.cloneNode(true);
+    node.setAttribute('data-source-index', p.i);
+    return node;
+  };
   if (state.flat) {
     const g = el('g', { id: 'flat' });
     paths.forEach(p => g.append(clone(p)));
@@ -336,13 +352,13 @@ function build({ W, H, paths }) {
   };
   // Clip each eyelid to the union of the skin and eye paths. Keep the clip on a
   // static wrapper and animate only the eyelid inside it.
-  const lidWrap = (name, shapeFn = lidShape) => {
-    const cp = el('clipPath', { id: 'cLid' + name, clipPathUnits: 'userSpaceOnUse' });
+  const lidWrap = (name, shapeFn = lidShape, idSuffix = name, includeOverlappingFace = false) => {
+    const cp = el('clipPath', { id: 'cLid' + idSuffix, clipPathUnits: 'userSpaceOnUse' });
     const skinPath = paths.find(p => p.i === CFG.skinIndex);
     if (skinPath) cp.append(clone(skinPath));
-    paths.filter(p => p.inHead && p.part === name).forEach(p => cp.append(clone(p)));
+    paths.filter(p => p.inHead && (p.part === name || (includeOverlappingFace && p.part === 'face' && overlapRatio(p.box, R[name]) > .08))).forEach(p => cp.append(clone(p)));
     defs.append(cp);
-    const w = el('g', { 'clip-path': `url(#cLid${name})` });
+    const w = el('g', { 'clip-path': `url(#cLid${idSuffix})` });
     const lid = shapeFn(R[name]);
     w.append(lid);
     gHead.append(w);
@@ -351,6 +367,118 @@ function build({ W, H, paths }) {
   parts.eyeLLid = [lidWrap('eyeL')];
   parts.eyeRLid = [lidWrap('eyeR')];
   parts.mouthLip = [lidWrap('mouth', lipShape)];
+
+  const intersects = (box, region) => box.x < region.x2 && box.x + box.w > region.x1 && box.y < region.y2 && box.y + box.h > region.y1;
+  const maskClone = (path, fill) => {
+    const node = clone(path);
+    node.setAttribute('fill', fill);
+    return node;
+  };
+  // Reproduce the source paint order so covers can only land on visible skin,
+  // not on the hair shapes that sit above the broad skin face path.
+  const coverMask = (id, regionRect, allowParts = []) => {
+    const mask = el('mask', { id, maskUnits: 'userSpaceOnUse' });
+    mask.append(el('rect', { x: 0, y: 0, width: W, height: H, fill: '#000' }));
+    const skinPath = paths.find(p => p.i === CFG.skinIndex);
+    if (skinPath) mask.append(maskClone(skinPath, '#fff'));
+    const region = { x1: regionRect.x1 - 12, y1: regionRect.y1 - 12, x2: regionRect.x2 + 12, y2: regionRect.y2 + 12 };
+    paths.filter((p) => p.inHead && p.i > CFG.skinIndex && intersects(p.box, region) && !allowParts.includes(p.part))
+      .forEach((p) => mask.append(maskClone(p, '#000')));
+    paths.filter((p) => p.inHead && p.i > CFG.skinIndex && intersects(p.box, region) && allowParts.includes(p.part))
+      .forEach((p) => mask.append(maskClone(p, '#fff')));
+    defs.append(mask);
+    return `url(#${id})`;
+  };
+  const maskedWrap = (id, regionRect, allowParts, child) => {
+    const wrapper = el('g', { mask: coverMask(id, regionRect, allowParts) });
+    wrapper.append(child);
+    gHead.append(wrapper);
+    return child;
+  };
+
+  const eyeCleanupShape = (Rr) => el('ellipse', {
+    cx: Rr.x1 + (Rr.x2 - Rr.x1) * .28, cy: Rr.y1 + 112,
+    rx: (Rr.x2 - Rr.x1) * .30, ry: 46, fill: CFG.skin,
+  });
+  const eyeCleanupL = el('g', { class: 'emotion-eye-cleanup', opacity: 0 });
+  const eyeCleanupR = el('g', { class: 'emotion-eye-cleanup', opacity: 0 });
+  eyeCleanupL.append(eyeCleanupShape(R.eyeL));
+  eyeCleanupR.append(eyeCleanupShape(R.eyeR));
+  const eyeCleanupLWrap = el('g', { mask: coverMask('mEmotionEyeCleanupL', R.eyeL) });
+  const eyeCleanupRWrap = el('g', { mask: coverMask('mEmotionEyeCleanupR', R.eyeR) });
+  eyeCleanupLWrap.append(eyeCleanupL);
+  eyeCleanupRWrap.append(eyeCleanupR);
+  gHead.append(eyeCleanupLWrap, eyeCleanupRWrap);
+
+  const maskedLidWrap = (name, shapeFn, idSuffix) => {
+    const lid = shapeFn(R[name]);
+    return maskedWrap('m' + idSuffix, R[name], [name], lid);
+  };
+
+  const happyLidShape = (Rr) => {
+    const cx = (Rr.x1 + Rr.x2) / 2, w = Rr.x2 - Rr.x1, top = Rr.y1, bottom = Rr.y1 + (Rr.y2 - Rr.y1) * 0.62;
+    const x1 = Rr.x1 - w * 0.05, x2 = Rr.x2 + w * 0.05;
+    const g = el('g', { class: 'lid lid-happy' });
+    g.append(
+      el('path', { d: `M${x1} ${top - 6} L${x2} ${top - 6} L${x2} ${bottom} L${x1} ${bottom} Z`, fill: CFG.skin }),
+      el('path', { 'data-happy-line': '1', d: `M${x1 + w * 0.08} ${bottom - 2} Q${cx} ${bottom - 68} ${x2 - w * 0.08} ${bottom - 2}`, fill: 'none', stroke: CFG.lineColor, 'stroke-width': 8, 'stroke-linecap': 'round' }),
+    );
+    return g;
+  };
+  const happyLidL = maskedLidWrap('eyeL', happyLidShape, 'happyEyeL');
+  const happyLidR = maskedLidWrap('eyeR', happyLidShape, 'happyEyeR');
+  const relaxedLidL = maskedLidWrap('eyeL', lidShape, 'relaxedEyeL');
+  const relaxedLidR = maskedLidWrap('eyeR', lidShape, 'relaxedEyeR');
+  const browShape = (Rr) => {
+    const x1 = Rr.x1 + 25, x2 = Rr.x2 - 25, cx = (x1 + x2) / 2, y = Rr.y1 + 45;
+    const cover = el('path', { d: `M${x1 - 18} ${y + 10} Q${cx} ${y - 34} ${x2 + 18} ${y + 8} Q${cx} ${y + 30} ${x1 - 18} ${y + 10} Z`, fill: CFG.skin });
+    const brow = el('path', { d: `M${x1} ${y + 9} Q${cx} ${y - 30} ${x2} ${y + 4} Q${cx} ${y + 16} ${x1} ${y + 9} Z`, fill: '#4a251b' });
+    const g = el('g', { class: 'emotion-brow', opacity: 0 });
+    g.append(cover, brow);
+    return g;
+  };
+  const browL = browShape(R.browL);
+  const browR = browShape(R.browR);
+  const browLWrap = el('g', { mask: coverMask('mEmotionBrowL', R.browL) });
+  const browRWrap = el('g', { mask: coverMask('mEmotionBrowR', R.browR) });
+  browLWrap.append(browL); browRWrap.append(browR);
+  gHead.append(browLWrap, browRWrap);
+
+  const blushGradient = el('radialGradient', { id: 'fxEmotionBlush', cx: '.5', cy: '.5', r: '.5' });
+  blushGradient.append(
+    el('stop', { offset: 0, 'stop-color': '#ff6688', 'stop-opacity': '.72' }),
+    el('stop', { offset: 1, 'stop-color': '#ff6688', 'stop-opacity': 0 }),
+  );
+  defs.append(blushGradient);
+  const expressionGroup = el('g', { id: 'emotionExpressions', 'pointer-events': 'none' });
+  const expressionGroups = Object.fromEntries(EMOTIONS.map((emotion) => [emotion, el('g', { 'data-emotion': emotion, opacity: 0 })]));
+  const eyeL = R.eyeL, eyeR = R.eyeR;
+  const blush = (group, opacity = '.72') => group.append(
+    el('ellipse', { cx: eyeL.x1 + 48, cy: R.face.y2 - 120, rx: 72, ry: 30, fill: 'url(#fxEmotionBlush)', opacity }),
+    el('ellipse', { cx: eyeR.x2 - 48, cy: R.face.y2 - 120, rx: 72, ry: 30, fill: 'url(#fxEmotionBlush)', opacity }),
+  );
+  blush(expressionGroups.happy);
+  blush(expressionGroups.sad, '.42');
+  blush(expressionGroups.relaxed, '.25');
+  const markGroups = Object.fromEntries(EMOTIONS.map((emotion) => [emotion, el('g', { 'data-mark-emotion': emotion })]));
+  const markPath = (group, d, attrs = {}) => group.append(el('path', { d, ...attrs }));
+  const heartX = eyeR.x2 + 95, heartY = eyeR.y1 - 130;
+  markPath(markGroups.happy, `M${heartX} ${heartY + 28} C${heartX - 54} ${heartY - 20} ${heartX - 60} ${heartY + 58} ${heartX} ${heartY + 94} C${heartX + 60} ${heartY + 58} ${heartX + 54} ${heartY - 20} ${heartX} ${heartY + 28} Z`, { fill: '#ff5b92' });
+  const sweatX = eyeR.x2 + 100, sweatY = R.face.y2 - 220;
+  markPath(markGroups.sad, `M${sweatX} ${sweatY} C${sweatX - 48} ${sweatY + 58} ${sweatX - 38} ${sweatY + 96} ${sweatX} ${sweatY + 96} C${sweatX + 38} ${sweatY + 96} ${sweatX + 48} ${sweatY + 58} ${sweatX} ${sweatY} Z`, { fill: '#42b9d8' });
+  const angerX = heartX + 18, angerY = heartY + 52;
+  markPath(markGroups.angry, `M${angerX} ${angerY - 22} Q${angerX + 12} ${angerY - 38} ${angerX + 24} ${angerY - 22} M${angerX + 22} ${angerY} Q${angerX + 38} ${angerY + 12} ${angerX + 22} ${angerY + 24} M${angerX} ${angerY + 22} Q${angerX - 12} ${angerY + 38} ${angerX - 24} ${angerY + 22} M${angerX - 22} ${angerY} Q${angerX - 38} ${angerY - 12} ${angerX - 22} ${angerY - 24}`, { fill: 'none', stroke: '#f04d36', 'stroke-width': 10, 'stroke-linecap': 'round' });
+  const surpriseX = eyeR.x2 + 125, surpriseY = eyeR.y1 - 125;
+  markPath(markGroups.surprised, `M${surpriseX} ${surpriseY} Q${surpriseX + 30} ${surpriseY - 18} ${surpriseX + 60} ${surpriseY} L${surpriseX + 48} ${surpriseY + 70} Q${surpriseX + 30} ${surpriseY + 84} ${surpriseX + 12} ${surpriseY + 70} Z`, { fill: '#ff9d32' });
+  markPath(markGroups.surprised, `M${surpriseX + 12} ${surpriseY + 94} Q${surpriseX + 30} ${surpriseY + 78} ${surpriseX + 48} ${surpriseY + 94} Q${surpriseX + 30} ${surpriseY + 112} ${surpriseX + 12} ${surpriseY + 94} Z`, { fill: '#ff9d32' });
+  const mouthLine = [...gHead.querySelectorAll('[data-line]')].pop();
+  Object.values(expressionGroups).forEach((group) => expressionGroup.append(group));
+  Object.values(markGroups).forEach((group) => expressionGroup.append(group));
+  gHead.append(expressionGroup);
+  const markCenters = {
+    happy: [heartX, heartY + 40], sad: [sweatX, sweatY + 48], angry: [angerX, angerY], surprised: [surpriseX + 30, surpriseY + 48], relaxed: [0, 0], neutral: [0, 0],
+  };
+  const expressionRefs = { groups: expressionGroups, happyLids: [happyLidL, happyLidR], relaxedLids: [relaxedLidL, relaxedLidR], eyeCleanups: [eyeCleanupL, eyeCleanupR], eyeParts: [parts.eyeL, parts.eyeR], brows: { left: browL, right: browR }, markGroups, markCenters, mouthLine };
 
   const headWrap = el('g', { mask: 'url(#mHead)' });
   headWrap.append(gHead);
@@ -395,7 +523,7 @@ function build({ W, H, paths }) {
 
   // Debug overlays
   const dbg = el('g', { class: 'debug-only', fill: 'none', 'stroke-width': 3 });
-  const colors = { eyeL: '#0af', eyeR: '#0af', mouth: '#f0a', face: '#0c0' };
+  const colors = { eyeL: '#0af', eyeR: '#0af', browL: '#fa0', browR: '#fa0', mouth: '#f0a', face: '#0c0' };
   for (const [name, R] of Object.entries(CFG.regions)) {
     dbg.append(el('rect', { x: R.x1, y: R.y1, width: R.x2 - R.x1, height: R.y2 - R.y1, stroke: colors[name], 'stroke-dasharray': '12 8' }));
   }
@@ -408,6 +536,7 @@ function build({ W, H, paths }) {
     svg,
     parts,
     counts,
+    expressionGroups,
     effects: {
       ...effectRefs,
       scene,
@@ -419,19 +548,107 @@ function build({ W, H, paths }) {
       patternRect,
       drawOverlay,
       revealWrap,
+      expression: createExpressionController(expressionRefs, state.emotion),
+    },
+  };
+}
+
+function createExpressionController(expressionRefs, initialEmotion = 'neutral') {
+  if (!expressionRefs) return { setEmotion() {}, setBlink() {}, destroy() {} };
+  initialEmotion = normalizeEmotion(new URLSearchParams(location.search).get('emotion') || initialEmotion);
+  let current = normalizeEmotion(initialEmotion);
+  let target = current;
+  let weights = Object.fromEntries(EMOTIONS.map((emotion) => [emotion, 0]));
+  weights[current] = 1;
+  let frameId = 0;
+
+  const render = () => {
+    for (const emotion of EMOTIONS) {
+      expressionRefs.groups[emotion].style.opacity = String(weights[emotion]);
+      const mark = expressionRefs.markGroups[emotion];
+      const center = expressionRefs.markCenters[emotion] ?? [0, 0];
+      const scale = .6 + weights[emotion] * .4;
+      mark.setAttribute('transform', `translate(${center[0]} ${center[1]}) scale(${scale}) translate(${-center[0]} ${-center[1]})`);
+      mark.style.opacity = String(weights[emotion]);
+    }
+    expressionRefs.happyLids.forEach((lid) => { lid.style.visibility = weights.happy > .01 ? 'visible' : 'hidden'; });
+    expressionRefs.relaxedLids.forEach((lid) => { lid.style.visibility = weights.relaxed > .01 ? 'visible' : 'hidden'; });
+    const browTransforms = {
+      left: { angry: { angle: 14, y: 0 }, sad: { angle: -14, y: 0 }, surprised: { angle: 0, y: -16 } },
+      right: { angry: { angle: -14, y: 0 }, sad: { angle: 14, y: 0 }, surprised: { angle: 0, y: -16 } },
+    };
+    for (const side of ['left', 'right']) {
+      const region = side === 'left' ? CFG.regions.browL : CFG.regions.browR;
+      const cx = (region.x1 + region.x2) / 2, cy = (region.y1 + region.y2) / 2;
+      const transform = Object.entries(browTransforms[side]).reduce((result, [emotion, value]) => ({ angle: result.angle + weights[emotion] * value.angle, y: result.y + weights[emotion] * value.y }), { angle: 0, y: 0 });
+      expressionRefs.brows[side].setAttribute('transform', `translate(0 ${transform.y}) rotate(${transform.angle} ${cx} ${cy})`);
+      expressionRefs.brows[side].style.opacity = String(1 - weights.neutral);
+    }
+    const hideOriginalEyes = weights.happy > .01 || weights.relaxed > .01;
+    expressionRefs.eyeCleanups.forEach((group, index) => { group.style.opacity = hideOriginalEyes && index === 0 ? '1' : '0'; });
+    if (expressionRefs.mouthLine) {
+      const top = CFG.regions.mouth.y1 + 8;
+      const cx = (CFG.regions.mouth.x1 + CFG.regions.mouth.x2) / 2;
+      const x1 = CFG.regions.mouth.x1 + (CFG.regions.mouth.x2 - CFG.regions.mouth.x1) * .15;
+      const x2 = CFG.regions.mouth.x2 - (CFG.regions.mouth.x2 - CFG.regions.mouth.x1) * .15;
+      const controlOffset = Object.entries({ happy: 54, sad: -3, angry: 8, surprised: 12, relaxed: 25, neutral: 22 })
+        .reduce((sum, [emotion, offset]) => sum + weights[emotion] * offset, 0);
+      expressionRefs.mouthLine.setAttribute('d', `M${x1} ${top + 12} Q${cx} ${top + controlOffset} ${x2} ${top + 12}`);
+    }
+  };
+  const setBlink = (value, ex = 0, ey = 0) => {
+    const expressionClosed = weights.happy > .01 || weights.relaxed > .01;
+    const eyeScale = expressionClosed ? .08 : 1 - value * .92;
+    const regions = [CFG.regions.eyeL, CFG.regions.eyeR];
+    expressionRefs.eyeParts.forEach((groups, index) => {
+      const region = regions[index];
+      const cx = (region.x1 + region.x2) / 2;
+      const lidY = region.y1 + (region.y2 - region.y1) * .62;
+      setT(groups, `translate(${ex} ${ey}) ${scaleAbout(cx, lidY, 1, eyeScale)}`);
+    });
+    render();
+  };
+  const setEmotion = (value) => {
+    const next = normalizeEmotion(value);
+    if (next === target) return;
+    cancelAnimationFrame(frameId);
+    current = target;
+    target = next;
+    const start = { ...weights };
+    const startedAt = performance.now();
+    const transition = (now) => {
+      const progress = Math.min((now - startedAt) / 220, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      for (const emotion of EMOTIONS) {
+        weights[emotion] = start[emotion] * (1 - eased) + (emotion === target ? eased : 0);
+      }
+      render();
+      if (progress < 1) frameId = requestAnimationFrame(transition);
+      else current = target;
+    };
+    frameId = requestAnimationFrame(transition);
+  };
+  render();
+  return {
+    setEmotion,
+    setBlink,
+    destroy() {
+      cancelAnimationFrame(frameId);
+      current = 'neutral';
     },
   };
 }
 
 function createEffectController(svg, effects) {
   if (!effects) {
-    return { setEffects() {}, setAudioLevel() {}, replayReveal() {}, destroy() {} };
+    return { setEffects() {}, setEmotion() {}, setAudioLevel() {}, replayReveal() {}, destroy() {} };
   }
 
   let config = {
     visualMode: 'normal', colorMood: 'neutral', audioGlow: false, glitch: false,
-    distortion: 'none', pattern: 'none', reveal: 'none', effectIntensity: 1,
+    distortion: 'none', pattern: 'none', reveal: 'none', effectIntensity: 1, emotionSync: true,
   };
+  let emotion = state.emotion;
   let audioLevel = 0;
   let speaking = false;
   let revealFrameId = 0;
@@ -467,7 +684,10 @@ function createEffectController(svg, effects) {
   const setEffects = (next) => {
     config = { ...config, ...next, effectIntensity: clamp(next.effectIntensity ?? config.effectIntensity, .25, 2) };
     const visualMode = ['normal', 'monochrome', 'lineArt', 'neon'].includes(config.visualMode) ? config.visualMode : 'normal';
-    const mood = Object.prototype.hasOwnProperty.call(MOOD_MATRICES, config.colorMood) ? config.colorMood : 'neutral';
+    const expressionEmotion = config.emotionSync || params.has('emotion') ? emotion : 'neutral';
+    effects.expression?.setEmotion(expressionEmotion);
+    const requestedMood = config.emotionSync ? EMOTION_MOODS[emotion] : config.colorMood;
+    const mood = Object.prototype.hasOwnProperty.call(MOOD_MATRICES, requestedMood) ? requestedMood : 'neutral';
     const distortion = ['cyber', 'water'].includes(config.distortion) ? config.distortion : 'none';
     const pattern = ['aurora', 'scanlines', 'dots'].includes(config.pattern) ? config.pattern : 'none';
 
@@ -481,7 +701,7 @@ function createEffectController(svg, effects) {
 
     effects.moodWrap.removeAttribute('filter');
     if (mood !== 'neutral') {
-      effects.moodMatrix.setAttribute('values', MOOD_MATRICES[mood]);
+      effects.moodMatrix.setAttribute('values', config.emotionSync ? blendMoodMatrix(MOOD_MATRICES[mood]) : MOOD_MATRICES[mood]);
       effects.moodWrap.setAttribute('filter', 'url(#fxMood)');
     }
 
@@ -506,8 +726,15 @@ function createEffectController(svg, effects) {
     }
 
     const glowColors = { neutral: '#ff5f86', happy: '#ff8a3d', calm: '#38d8ff', dramatic: '#ff315f', dreamy: '#aa6cff' };
-    effects.glowFlood.setAttribute('flood-color', glowColors[config.colorMood] ?? glowColors.neutral);
+    effects.glowFlood.setAttribute('flood-color', glowColors[mood] ?? glowColors.neutral);
     updateAudioGlow();
+  };
+
+  const setEmotion = (value) => {
+    emotion = normalizeEmotion(value);
+    svg.dataset.emotion = emotion;
+    effects.expression?.setEmotion(emotion);
+    setEffects(config);
   };
 
   const animate = (duration, update, complete) => {
@@ -552,6 +779,7 @@ function createEffectController(svg, effects) {
 
   return {
     setEffects,
+    setEmotion,
     setAudioLevel(value, isSpeaking) {
       audioLevel = clamp(value, 0, 1);
       speaking = Boolean(isSpeaking);
@@ -575,7 +803,7 @@ function centerOf(list, fallback) {
 function setT(list, value) { for (const g of list) g.setAttribute('transform', value); }
 function setVis(list, visible) { for (const g of list) g.style.visibility = visible ? 'visible' : 'hidden'; }
 
-function startAnimation(parts, paths) {
+function startAnimation(parts, paths, expressionController) {
   const M = CFG.motion;
   const of = (name) => paths.filter(p => p.inHead && p.part === name);
   const eyeLc = centerOf(of('eyeL'), { x: 1115, y: 565, top: 480, bottom: 650 });
@@ -632,6 +860,7 @@ function startAnimation(parts, paths) {
     setT(parts.eyeLLid, `translate(${ex * 0.3} ${ey * 0.3}) ${scaleAbout((RL.x1 + RL.x2) / 2, RL.y1 - 6, 1, lidS)}`);
     setT(parts.eyeRLid, `translate(${ex * 0.3} ${ey * 0.3}) ${scaleAbout((RR.x1 + RR.x2) / 2, RR.y1 - 6, 1, lidS)}`);
     setVis(parts.eyeLLid, blinkAmt > 0.02); setVis(parts.eyeRLid, blinkAmt > 0.02);
+    expressionController?.setBlink(blinkAmt, ex, ey);
 
     // Mouth: open=1 shows the original artwork and open=0 shows the closed
     // mouth. The skin-colored lip overlay rises from below.
@@ -673,8 +902,9 @@ export async function createSvgAvatar(container, srcUrl) {
   const { svg, parts, counts, effects } = build(data);
   container.replaceChildren(svg);
   svg.classList.toggle('debug', state.flags.debug);
-  const stopAnimation = parts ? startAnimation(parts, data.paths) : () => {};
+  const stopAnimation = parts ? startAnimation(parts, data.paths, effects?.expression) : () => {};
   const effectController = createEffectController(svg, effects);
+  effectController.setEmotion(state.emotion);
 
   const handleMouseMove = (event) => {
     if (params.has('mx')) return;
@@ -698,6 +928,11 @@ export async function createSvgAvatar(container, srcUrl) {
       if (!state.isSpeaking) state.audioMouthOpen = 0;
       effectController.setAudioLevel(state.audioMouthOpen, state.isSpeaking);
     },
+    setEmotion(value) {
+      const debugEmotion = new URLSearchParams(location.search).get('emotion');
+      state.emotion = debugEmotion ? normalizeEmotion(debugEmotion) : normalizeEmotion(value);
+      effectController.setEmotion(state.emotion);
+    },
     setOptions(options) {
       if (typeof options.amp === 'number') state.amp = options.amp;
       if (typeof options.speed === 'number') state.speed = options.speed;
@@ -717,6 +952,7 @@ export async function createSvgAvatar(container, srcUrl) {
     },
     destroy() {
       stopAnimation();
+      effects?.expression?.destroy();
       effectController.destroy();
       container.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mouseleave', handleMouseLeave);

@@ -270,7 +270,7 @@ export function SettingsPanel({
         <div className="settings-group">
           {([
             ['breath', '呼吸'], ['headSway', '首の揺れ'], ['hairSway', '髪の揺れ'],
-            ['blink', 'まばたき'], ['mouseFollow', 'マウス追従'], ['debug', 'デバッグ表示'],
+            ['blink', 'まばたき'], ['mouseFollow', 'マウス追従'], ['debug', 'デバッグ表示'], ['emotionSync', '感情連動表情'],
           ] as const).map(([key, label]) => (
             <label className="check-field" key={key}>
               <input type="checkbox" checked={settings.avatar[key]} onChange={(event) => onUpdateAvatar({ [key]: event.target.checked })} />

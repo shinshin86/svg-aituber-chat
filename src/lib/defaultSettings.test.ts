@@ -8,6 +8,7 @@ describe('avatar advanced effect settings', () => {
     expect(settings.avatar.breath).toBe(false);
     expect(settings.avatar.visualMode).toBe('normal');
     expect(settings.avatar.colorMood).toBe('neutral');
+    expect(settings.avatar.emotionSync).toBe(true);
     expect(settings.avatar.reveal).toBe('none');
     expect(settings.avatar.effectIntensity).toBe(1);
     expect(settings.stream.youtubeEnabled).toBe(false);

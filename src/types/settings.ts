@@ -86,6 +86,7 @@ export interface AvatarSettings {
   blink: boolean;
   mouseFollow: boolean;
   debug: boolean;
+  emotionSync: boolean;
   amplitude: number;
   speed: number;
   visualMode: AvatarVisualMode;

@@ -137,6 +137,7 @@ export default function App() {
           settings={settingsState.settings.avatar}
           mouthOpen={audio.mouthOpen}
           isSpeaking={audio.isSpeaking}
+          emotion={core.emotion}
           effectReplayToken={avatarEffectReplayToken}
         />
 

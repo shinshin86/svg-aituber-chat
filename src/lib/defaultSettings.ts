@@ -51,7 +51,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     provider: 'openai',
     model: 'gpt-4.1-nano',
     endpoint: 'http://localhost:11434/v1/chat/completions',
-    systemPrompt: 'あなたは明るく親しみやすいAIキャラクターです。返答は日本語で短く自然に話してください。',
+    systemPrompt: 'あなたは明るく親しみやすいAIキャラクターです。返答は日本語で短く自然に話してください。返答の先頭に [happy] [sad] [angry] [surprised] [neutral] のいずれか1つを付けてください。',
     apiKeys: {},
   },
   tts: {
@@ -66,6 +66,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     blink: true,
     mouseFollow: true,
     debug: false,
+    emotionSync: true,
     amplitude: 1,
     speed: 1,
     visualMode: 'normal',
