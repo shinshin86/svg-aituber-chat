@@ -67,6 +67,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     mouseFollow: true,
     debug: false,
     emotionSync: true,
+    autoGesture: true,
     amplitude: 1,
     speed: 1,
     visualMode: 'normal',

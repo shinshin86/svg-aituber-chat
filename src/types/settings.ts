@@ -87,6 +87,7 @@ export interface AvatarSettings {
   mouseFollow: boolean;
   debug: boolean;
   emotionSync: boolean;
+  autoGesture: boolean;
   amplitude: number;
   speed: number;
   visualMode: AvatarVisualMode;

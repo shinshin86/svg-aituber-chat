@@ -139,6 +139,7 @@ export default function App() {
           mouthOpen={audio.mouthOpen}
           mouthWidth={audio.mouthWidth}
           isSpeaking={audio.isSpeaking}
+          thinking={core.isProcessing}
           emotion={core.emotion}
           effectReplayToken={avatarEffectReplayToken}
         />

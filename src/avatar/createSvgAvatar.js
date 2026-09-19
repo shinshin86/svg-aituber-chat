@@ -18,6 +18,8 @@
  *   ?mx=0.5&my=-0.3  Freeze the pointer position (-1..1)
  *   ?mouth=0.3    Freeze mouth openness (0=closed, 1=original artwork)
  *   ?mouthw=1.25  Freeze mouth width (0.75..1.25)
+ *   ?gesture=nod|tilt|jump|laugh&gt=0.35  Freeze a gesture pose
+ *   ?thinking=1    Freeze the thinking gaze
  *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
  *   ?amp=0        Override the motion amplitude
  *   ?flat=1       Render the original SVG without splitting it
@@ -67,6 +69,13 @@ const state = {
   emotion: normalizeEmotion(params.get('emotion')),
   flat: params.has('flat'), // Render the original SVG without region splitting
   nextBlinkAt: 1.5, blinkStart: -1,
+  thinking: params.has('thinking'),
+  autoGesture: true,
+  gestureName: params.get('gesture') || '',
+  gestureStart: -1,
+  gestureProgress: params.has('gt') ? Math.min(Math.max(parseFloat(params.get('gt')) || 0, 0), 1) : null,
+  playGesture: () => {},
+  setThinking: (value) => { state.thinking = Boolean(value); },
 };
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -486,7 +495,9 @@ function build({ W, H, paths }) {
   headWrap.append(gHead);
 
   const scene = el('g', { id: 'avatarScene' });
-  scene.append(gBand, bodyWrap, headWrap);
+  const gestureWrap = el('g', { id: 'avatarGestureWrap' });
+  gestureWrap.append(gBand, bodyWrap, headWrap);
+  scene.append(gestureWrap);
   const moodWrap = el('g', { id: 'effectMoodWrap' });
   moodWrap.append(scene);
   const styleWrap = el('g', { id: 'effectStyleWrap' });
@@ -542,6 +553,7 @@ function build({ W, H, paths }) {
     effects: {
       ...effectRefs,
       scene,
+      gestureWrap,
       moodWrap,
       styleWrap,
       distortionWrap,
@@ -805,7 +817,7 @@ function centerOf(list, fallback) {
 function setT(list, value) { for (const g of list) g.setAttribute('transform', value); }
 function setVis(list, visible) { for (const g of list) g.style.visibility = visible ? 'visible' : 'hidden'; }
 
-function startAnimation(parts, paths, expressionController) {
+function startAnimation(parts, paths, expressionController, gestureWrap, W, H) {
   const M = CFG.motion;
   const of = (name) => paths.filter(p => p.inHead && p.part === name);
   const eyeLc = centerOf(of('eyeL'), { x: 1115, y: 565, top: 480, bottom: 650 });
@@ -817,6 +829,44 @@ function startAnimation(parts, paths, expressionController) {
 
   let animationFrameId = 0;
   let destroyed = false;
+  let springAngle = 0;
+  let springVelocity = 0;
+  let previousHeadDeg = 0;
+  let saccadeX = 0, saccadeY = 0, saccadeTargetX = 0, saccadeTargetY = 0, nextSaccadeAt = 2.5;
+  let doubleBlinkPending = false;
+
+  const gestureNames = new Set(['nod', 'tilt', 'jump', 'laugh']);
+  const playGesture = (name) => {
+    const busy = state.gestureName && state.gestureProgress === null && state.gestureStart >= 0 && t - state.gestureStart < 0.7;
+    if (gestureNames.has(name) && state.gestureProgress === null && !busy) {
+      state.gestureName = name;
+      state.gestureStart = t;
+    }
+  };
+  state.playGesture = playGesture;
+
+  const gesturePose = () => {
+    if (!gestureNames.has(state.gestureName)) return { sceneY: 0, sceneScaleX: 1, sceneScaleY: 1, headY: 0, headRotate: 0, headScaleY: 1 };
+    const progress = state.gestureProgress ?? (state.gestureStart < 0 ? -1 : Math.min((t - state.gestureStart) / 0.7, 1));
+    if (progress < 0) return { sceneY: 0, sceneScaleX: 1, sceneScaleY: 1, headY: 0, headRotate: 0, headScaleY: 1 };
+    const wave = Math.sin(Math.PI * progress);
+    if (progress >= 1 && state.gestureProgress === null) state.gestureName = '';
+    if (state.gestureName === 'nod') return { sceneY: 0, sceneScaleX: 1, sceneScaleY: 1, headY: 13 * Math.sin(progress * Math.PI * 2) * wave, headRotate: 0, headScaleY: .985 };
+    if (state.gestureName === 'tilt') return { sceneY: 0, sceneScaleX: 1, sceneScaleY: 1, headY: 0, headRotate: -4.5 * wave, headScaleY: 1 };
+    if (state.gestureName === 'jump') {
+      if (progress < .2) {
+        const phase = progress / .2;
+        return { sceneY: 8 * phase, sceneScaleX: 1 + .01 * phase, sceneScaleY: 1 - .03 * phase, headY: 0, headRotate: 0, headScaleY: 1 };
+      }
+      if (progress < .75) {
+        const phase = (progress - .2) / .55;
+        return { sceneY: 8 - 36 * phase, sceneScaleX: 1 - .02 * phase, sceneScaleY: .97 + .07 * phase, headY: 0, headRotate: 0, headScaleY: 1 };
+      }
+      const phase = (progress - .75) / .25;
+      return { sceneY: -28 + 28 * phase, sceneScaleX: .98 + .02 * phase, sceneScaleY: 1.04 - .07 * phase, headY: 0, headRotate: 0, headScaleY: 1 };
+    }
+    return { sceneY: Math.sin(progress * Math.PI * 8) * 4 * wave, sceneScaleX: 1, sceneScaleY: 1, headY: 0, headRotate: Math.sin(progress * Math.PI * 4) * 2 * wave, headScaleY: 1 };
+  };
 
   function frame(nowMs) {
     if (destroyed) return;
@@ -832,11 +882,42 @@ function startAnimation(parts, paths, expressionController) {
     // Head and neck
     let headDeg = F.headSway ? Math.sin(t * 2 * Math.PI / M.headPeriod) * M.headDeg * A : 0;
     if (F.mouseFollow) headDeg += state.mouse.x * M.mouseHeadDeg * A;
-    setT(parts.head, `translate(0 ${breath * 0.5}) rotate(${headDeg} ${CFG.pivot.x} ${CFG.pivot.y})`);
+    const pose = gesturePose();
+    if (state.fixedT === null && F.mouseFollow && Math.abs(state.mouse.x) < .05 && Math.abs(state.mouse.y) < .05) {
+      if (t >= nextSaccadeAt) {
+        saccadeTargetX = (Math.random() * 2 - 1) * 3;
+        saccadeTargetY = (Math.random() * 2 - 1) * 2;
+        nextSaccadeAt = t + 2 + Math.random() * 3;
+      }
+      const step = Math.min(dt / .08, 1);
+      saccadeX += (saccadeTargetX - saccadeX) * step;
+      saccadeY += (saccadeTargetY - saccadeY) * step;
+    } else {
+      saccadeX = 0; saccadeY = 0;
+    }
+    if (gestureWrap) setT([gestureWrap], `translate(0 ${pose.sceneY}) ${scaleAbout(W / 2, H, pose.sceneScaleX, pose.sceneScaleY)}`);
+    const safeDt = state.fixedT === null ? Math.max(dt, 1 / 120) : 0;
+    const headVelocity = safeDt ? (headDeg - previousHeadDeg) / safeDt : 0;
+    if (safeDt) {
+      const targetSpring = -headVelocity * 0.12;
+      springVelocity += (targetSpring - springAngle) * 18 * safeDt;
+      springVelocity *= Math.exp(-7 * safeDt);
+      springAngle += springVelocity * safeDt;
+    } else {
+      springAngle = 0;
+      springVelocity = 0;
+    }
+    previousHeadDeg = headDeg;
+    setT(parts.head, `translate(0 ${breath * 0.5 + pose.headY}) ${scaleAbout(CFG.pivot.x, CFG.pivot.y, 1, pose.headScaleY)} rotate(${headDeg + pose.headRotate} ${CFG.pivot.x} ${CFG.pivot.y})`);
 
     // Hair follows the head with a slight delayed counter-swing.
-    const hairDeg = (F.hairSway ? Math.sin(t * 2 * Math.PI / M.hairPeriod) * M.hairDeg * A : 0) - headDeg * 0.35;
-    setT(parts.hair, `rotate(${hairDeg} ${CFG.hairPivot.x} ${CFG.hairPivot.y})`);
+    const hairDeg = (F.hairSway ? Math.sin(t * 2 * Math.PI / M.hairPeriod) * M.hairDeg * A : 0) - headDeg * 0.35 + springAngle;
+    const parallaxX = F.mouseFollow ? state.mouse.x * 1.5 : 0;
+    const parallaxY = F.mouseFollow ? state.mouse.y * 1 : 0;
+    setT(parts.hair, `translate(${parallaxX} ${parallaxY}) rotate(${hairDeg} ${CFG.hairPivot.x} ${CFG.hairPivot.y})`);
+    setT(parts.face, `translate(${F.mouseFollow ? state.mouse.x * .6 : 0} ${F.mouseFollow ? state.mouse.y * .4 : 0})`);
+
+    setT(parts.body, `translate(0 ${breath})`);
 
     // Blinking
     let blinkAmt = 0;
@@ -845,13 +926,22 @@ function startAnimation(parts, paths, expressionController) {
       if (state.blinkStart < 0 && t >= state.nextBlinkAt) state.blinkStart = t;
       if (state.blinkStart >= 0) {
         const p = (t - state.blinkStart) / M.blinkDur;
-        if (p >= 1) { state.blinkStart = -1; state.nextBlinkAt = t + M.blinkMin + Math.random() * (M.blinkMax - M.blinkMin); }
+      if (p >= 1) {
+        state.blinkStart = -1;
+        if (!doubleBlinkPending && Math.random() < .2) {
+          doubleBlinkPending = true;
+          state.nextBlinkAt = t + .12;
+        } else {
+          doubleBlinkPending = false;
+          state.nextBlinkAt = t + M.blinkMin + Math.random() * (M.blinkMax - M.blinkMin);
+        }
+      }
         else blinkAmt = tri(p);
       }
     }
     const eyeScale = 1 - blinkAmt * 0.92;
-    const ex = F.mouseFollow ? state.mouse.x * M.mouseEyePx * A : 0;
-    const ey = F.mouseFollow ? state.mouse.y * M.mouseEyePx * 0.6 * A : 0;
+    const ex = (F.mouseFollow ? state.mouse.x * M.mouseEyePx * A : 0) + saccadeX;
+    const ey = (F.mouseFollow ? state.mouse.y * M.mouseEyePx * 0.6 * A : 0) + saccadeY + (state.thinking ? -9 : 0);
     const RL = CFG.regions.eyeL, RR = CFG.regions.eyeR;
     const lidL = RL.y1 + (RL.y2 - RL.y1) * 0.62; // Closed-eyelid position
     const lidR = RR.y1 + (RR.y2 - RR.y1) * 0.62;
@@ -905,7 +995,7 @@ export async function createSvgAvatar(container, srcUrl) {
   const { svg, parts, counts, effects } = build(data);
   container.replaceChildren(svg);
   svg.classList.toggle('debug', state.flags.debug);
-  const stopAnimation = parts ? startAnimation(parts, data.paths, effects?.expression) : () => {};
+  const stopAnimation = parts ? startAnimation(parts, data.paths, effects?.expression, effects?.gestureWrap, data.W, data.H) : () => {};
   const effectController = createEffectController(svg, effects);
   effectController.setEmotion(state.emotion);
 
@@ -926,9 +1016,11 @@ export async function createSvgAvatar(container, srcUrl) {
   const controller = {
     counts,
     setVoiceLevel(value, isSpeaking, mouthWidth) {
+      const wasSpeaking = state.isSpeaking;
       state.audioMouthOpen = Math.min(Math.max(Number(value) || 0, 0), 1);
       if (!params.has('mouthw') && mouthWidth !== undefined) state.audioMouthWidth = Number(mouthWidth) || 1;
       state.isSpeaking = Boolean(isSpeaking);
+      if (!wasSpeaking && state.isSpeaking && state.autoGesture) state.playGesture('nod');
       if (!state.isSpeaking) {
         state.audioMouthOpen = 0;
         state.audioMouthWidth = params.has('mouthw') ? state.audioMouthWidth : 1;
@@ -937,8 +1029,19 @@ export async function createSvgAvatar(container, srcUrl) {
     },
     setEmotion(value) {
       const debugEmotion = new URLSearchParams(location.search).get('emotion');
+      const previousEmotion = state.emotion;
       state.emotion = debugEmotion ? normalizeEmotion(debugEmotion) : normalizeEmotion(value);
+      if (state.autoGesture && previousEmotion !== state.emotion) {
+        const gesture = { happy: 'laugh', surprised: 'jump', sad: 'tilt', angry: 'tilt' }[state.emotion];
+        if (gesture) state.playGesture(gesture);
+      }
       effectController.setEmotion(state.emotion);
+    },
+    playGesture(name) {
+      state.playGesture(String(name));
+    },
+    setThinking(value) {
+      state.setThinking(value);
     },
     setOptions(options) {
       if (typeof options.amp === 'number') state.amp = options.amp;
@@ -946,6 +1049,7 @@ export async function createSvgAvatar(container, srcUrl) {
       for (const key of ['breath', 'headSway', 'hairSway', 'blink', 'mouseFollow']) {
         if (typeof options[key] === 'boolean') state.flags[key] = options[key];
       }
+      if (typeof options.autoGesture === 'boolean') state.autoGesture = options.autoGesture;
       if (typeof options.debug === 'boolean') {
         state.flags.debug = options.debug;
         svg.classList.toggle('debug', options.debug);

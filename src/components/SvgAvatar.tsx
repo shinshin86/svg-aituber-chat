@@ -7,6 +7,8 @@ interface AvatarController {
   counts: unknown;
   setVoiceLevel: (value: number, isSpeaking: boolean, mouthWidth?: number) => void;
   setEmotion: (emotion: string) => void;
+  playGesture: (name: string) => void;
+  setThinking: (value: boolean) => void;
   setOptions: (options: Record<string, number | boolean>) => void;
   setEffects: (settings: AvatarSettings) => void;
   replayReveal: () => void;
@@ -18,11 +20,12 @@ interface SvgAvatarProps {
   mouthOpen: number;
   mouthWidth: number;
   isSpeaking: boolean;
+  thinking: boolean;
   emotion: string;
   effectReplayToken: number;
 }
 
-export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, emotion, effectReplayToken }: SvgAvatarProps) {
+export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinking, emotion, effectReplayToken }: SvgAvatarProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AvatarController | null>(null);
   const latestSettingsRef = useRef(settings);
@@ -53,6 +56,7 @@ export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, emotion
           mouseFollow: currentSettings.mouseFollow,
           debug: currentSettings.debug,
           emotionSync: currentSettings.emotionSync,
+          autoGesture: currentSettings.autoGesture,
         });
         result.setEffects(currentSettings);
         setLoadError('');
@@ -84,6 +88,7 @@ export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, emotion
       mouseFollow: settings.mouseFollow,
       debug: settings.debug,
       emotionSync: settings.emotionSync,
+      autoGesture: settings.autoGesture,
     });
     controllerRef.current?.setEffects(settings);
   }, [settings]);
@@ -91,6 +96,10 @@ export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, emotion
   useEffect(() => {
     controllerRef.current?.setEmotion(emotion);
   }, [emotion]);
+
+  useEffect(() => {
+    controllerRef.current?.setThinking(thinking);
+  }, [thinking]);
 
   useEffect(() => {
     if (effectReplayToken > 0) controllerRef.current?.replayReveal();
