@@ -311,6 +311,7 @@ export function SettingsPanel({
               <option value="monochrome">モノクロ</option>
               <option value="lineArt">線画</option>
               <option value="neon">ネオン</option>
+              <option value="poster">ポスター</option>
             </select>
           </label>
           <label className="field">
@@ -335,6 +336,25 @@ export function SettingsPanel({
               onChange={(event) => onUpdateAvatar({ audioGlow: event.target.checked })}
             />
             <span>音声連動アウトライングロー</span>
+          </label>
+          <label className="field">
+            <span>白フチ</span>
+            <select value={settings.avatar.outline} onChange={(event) => onUpdateAvatar({ outline: event.target.value as AppSettings['avatar']['outline'] })}>
+              <option value="none">なし</option>
+              <option value="sticker">ステッカー</option>
+            </select>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.rimLight} onChange={(event) => onUpdateAvatar({ rimLight: event.target.checked })} />
+            <span>リムライト</span>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.aura} onChange={(event) => onUpdateAvatar({ aura: event.target.checked })} />
+            <span>背後オーラ</span>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.dropShadow} onChange={(event) => onUpdateAvatar({ dropShadow: event.target.checked })} />
+            <span>シルエットの影</span>
           </label>
           <label className="check-field">
             <input
@@ -380,6 +400,7 @@ export function SettingsPanel({
               <option value="wipe">マスクワイプ</option>
               <option value="iris">円形アイリス</option>
               <option value="draw">線描から登場</option>
+              <option value="dissolve">ディゾルブ</option>
             </select>
           </label>
           <button

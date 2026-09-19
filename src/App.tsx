@@ -117,10 +117,14 @@ export default function App() {
       : core.configurationMessage
         ? '設定待ち'
         : '待機中';
+  const debugBackground = new URLSearchParams(window.location.search).get('bg');
+  const background = ['white', 'dark', 'green'].includes(debugBackground || '')
+    ? debugBackground
+    : settingsState.settings.avatar.background;
 
   return (
     <div className={`app-shell ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
-      <main className={`stage background-${settingsState.settings.avatar.background} mood-${settingsState.settings.avatar.colorMood}`}>
+      <main className={`stage background-${background} mood-${settingsState.settings.avatar.colorMood}`}>
         <header className="stage-header">
           <div className="brand-mark">AO</div>
           <div>

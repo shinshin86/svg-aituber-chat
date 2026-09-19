@@ -20,6 +20,9 @@
  *   ?mouthw=1.25  Freeze mouth width (0.75..1.25)
  *   ?gesture=nod|tilt|jump|laugh&gt=0.35  Freeze a gesture pose
  *   ?thinking=1    Freeze the thinking gaze
+ *   ?outline=sticker  Enable the sticker white border
+ *   ?rim=1&visual=poster&aura=1&shadow=1  Enable T4 effects
+ *   ?reveal=dissolve&rp=0.5  Freeze dissolve progress
  *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
  *   ?amp=0        Override the motion amplitude
  *   ?flat=1       Render the original SVG without splitting it
@@ -230,6 +233,86 @@ function appendEffectDefinitions(defs, W, H) {
   glowMerge.append(el('feMergeNode', { in: 'glow' }), el('feMergeNode', { in: 'SourceGraphic' }));
   audioGlowFilter.append(glowMerge);
 
+  const stickerFilter = el('filter', { id: 'fxSticker', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const stickerShadow = el('feDropShadow', { in: 'SourceAlpha', dx: 0, dy: 0, stdDeviation: 4, 'flood-color': '#111827', 'flood-opacity': .25, result: 'stickerShadow' });
+  const stickerDilate = el('feMorphology', { in: 'SourceAlpha', operator: 'dilate', radius: 9, result: 'stickerDilate' });
+  const stickerFlood = el('feFlood', { 'flood-color': '#fff', result: 'stickerWhite' });
+  const stickerComposite = el('feComposite', { in: 'stickerWhite', in2: 'stickerDilate', operator: 'in', result: 'stickerOutline' });
+  stickerFilter.append(stickerShadow, stickerDilate, stickerFlood, stickerComposite);
+  const stickerMerge = el('feMerge');
+  stickerMerge.append(el('feMergeNode', { in: 'stickerShadow' }), el('feMergeNode', { in: 'stickerOutline' }), el('feMergeNode', { in: 'SourceGraphic' }));
+  stickerFilter.append(stickerMerge);
+
+  const rimFilter = el('filter', { id: 'fxRimLight', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const rimBlur = el('feGaussianBlur', { in: 'SourceAlpha', stdDeviation: 3, result: 'rimBlur' });
+  const rimErode = el('feMorphology', { in: 'SourceAlpha', operator: 'erode', radius: 24, result: 'rimErode' });
+  const rimEdge = el('feComposite', { in: 'SourceAlpha', in2: 'rimErode', operator: 'out', result: 'rimEdge' });
+  const rimGraphicErode = el('feMorphology', { in: 'SourceGraphic', operator: 'erode', radius: 24, result: 'rimGraphicErode' });
+  const rimGraphicEdge = el('feComposite', { in: 'SourceGraphic', in2: 'rimGraphicErode', operator: 'out', result: 'rimGraphicEdge' });
+  const rimLight = el('feSpecularLighting', {
+    in: 'rimBlur', surfaceScale: 1.5, specularConstant: .42, specularExponent: 28,
+    'lighting-color': '#fff', result: 'rimSpecular', 'kernelUnitLength': '1 1',
+  });
+  const rimPoint = el('fePointLight', { x: W * .84, y: H * .18, z: 48 });
+  rimLight.append(rimPoint);
+  const rimMask = el('feComposite', { in: 'rimSpecular', in2: 'rimEdge', operator: 'in', result: 'rimMasked' });
+  const rimFlood = el('feFlood', { 'flood-color': '#fff4df', 'flood-opacity': .7, result: 'rimColor' });
+  const rimBand = el('feComposite', { in: 'rimColor', in2: 'rimGraphicEdge', operator: 'in', result: 'rimBand' });
+  const rimHalo = el('feDropShadow', { in: 'SourceAlpha', dx: 0, dy: 0, stdDeviation: 5, 'flood-color': '#fff4df', 'flood-opacity': .58, result: 'rimHalo' });
+  const rimDilate = el('feMorphology', { in: 'SourceAlpha', operator: 'dilate', radius: 4, result: 'rimDilate' });
+  const rimOuter = el('feComposite', { in: 'rimDilate', in2: 'SourceAlpha', operator: 'out', result: 'rimOuter' });
+  const rimDirectionOffset = el('feOffset', { in: 'SourceAlpha', dx: -12, dy: 14, result: 'rimDirectionOffset' });
+  const rimDirectional = el('feComposite', { in: 'rimOuter', in2: 'rimDirectionOffset', operator: 'out', result: 'rimDirectional' });
+  const rimOuterColor = el('feFlood', { 'flood-color': '#fff4df', 'flood-opacity': .55, result: 'rimOuterColor' });
+  const rimOuterBand = el('feComposite', { in: 'rimOuterColor', in2: 'rimDirectional', operator: 'in', result: 'rimOuterBand' });
+  rimFilter.append(rimBlur, rimErode, rimEdge, rimGraphicErode, rimGraphicEdge, rimLight, rimMask, rimFlood, rimBand, rimHalo, rimDilate, rimOuter, rimDirectionOffset, rimDirectional, rimOuterColor, rimOuterBand);
+  const rimMerge = el('feMerge');
+  rimMerge.append(el('feMergeNode', { in: 'SourceGraphic' }), el('feMergeNode', { in: 'rimOuterBand' }));
+  rimFilter.append(rimMerge);
+
+  const posterFilter = el('filter', { id: 'fxPoster', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const posterTransfer = el('feComponentTransfer', { in: 'SourceGraphic' });
+  const posterTable = '0 .2 .4 .6 .8 1';
+  posterTransfer.append(
+    el('feFuncR', { type: 'discrete', tableValues: posterTable }),
+    el('feFuncG', { type: 'discrete', tableValues: posterTable }),
+    el('feFuncB', { type: 'discrete', tableValues: posterTable }),
+    el('feFuncA', { type: 'identity' }),
+  );
+  posterFilter.append(posterTransfer);
+
+  const dissolveFilter = el('filter', { id: 'fxDissolve', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const dissolveNoise = el('feTurbulence', { type: 'fractalNoise', baseFrequency: '.02', numOctaves: 2, seed: 17, result: 'dissolveNoise', 'color-interpolation-filters': 'sRGB' });
+  const dissolveAlphaFixed = el('feColorMatrix', {
+    in: 'dissolveNoise', type: 'matrix', values: '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0 1', result: 'dissolveNoiseOpaque',
+  });
+  const dissolveTransfer = el('feComponentTransfer', { in: 'dissolveNoiseOpaque', result: 'dissolveTone' });
+  const dissolveRed = el('feFuncR', { type: 'linear', slope: 12, intercept: -9.6, 'color-interpolation-filters': 'sRGB' });
+  dissolveTransfer.append(dissolveRed);
+  const dissolveMaskMatrix = el('feColorMatrix', {
+    in: 'dissolveTone', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0', result: 'dissolveMask',
+  });
+  const dissolveComposite = el('feComposite', { in: 'SourceGraphic', in2: 'dissolveMask', operator: 'in' });
+  dissolveFilter.append(dissolveNoise, dissolveAlphaFixed, dissolveTransfer, dissolveMaskMatrix, dissolveComposite);
+
+  const auraFilter = el('filter', { id: 'fxAura', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  auraFilter.append(
+    el('feGaussianBlur', { in: 'SourceAlpha', stdDeviation: 28, result: 'auraBlur' }),
+    el('feFlood', { 'flood-color': '#6b7cff', 'flood-opacity': .62, result: 'auraColor' }),
+    el('feComposite', { in: 'auraColor', in2: 'auraBlur', operator: 'in', result: 'aura' }),
+  );
+
+  const dropShadowFilter = el('filter', { id: 'fxDropShadow', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const dropShadowBlur = el('feGaussianBlur', { in: 'SourceAlpha', stdDeviation: 8, result: 'dropShadowBlur' });
+  const dropShadowOffset = el('feOffset', { in: 'dropShadowBlur', dx: 12, dy: 14, result: 'dropShadowOffset' });
+  const dropShadowFlood = el('feFlood', { 'flood-color': '#10131c', 'flood-opacity': .35, result: 'dropShadowColor' });
+  dropShadowFilter.append(
+    dropShadowBlur,
+    dropShadowOffset,
+    dropShadowFlood,
+    el('feComposite', { in: 'dropShadowColor', in2: 'dropShadowOffset', operator: 'in' }),
+  );
+
   const aurora = el('linearGradient', { id: 'fxAurora', gradientUnits: 'userSpaceOnUse', x1: 350, y1: 100, x2: W - 250, y2: H - 100 });
   aurora.append(
     el('stop', { offset: 0, 'stop-color': '#27e4ff' }),
@@ -264,6 +347,12 @@ function appendEffectDefinitions(defs, W, H) {
     tintFilter('fxPink', 'pink'),
     distortionFilter,
     audioGlowFilter,
+    stickerFilter,
+    rimFilter,
+    posterFilter,
+    dissolveFilter,
+    auraFilter,
+    dropShadowFilter,
     aurora,
     scanlines,
     dots,
@@ -273,7 +362,7 @@ function appendEffectDefinitions(defs, W, H) {
 
   return {
     W, H, moodMatrix, turbulence, turbulenceAnimation, displacement,
-    glowDilate, glowBlur, glowFlood, revealRect, revealCircle,
+    glowDilate, glowBlur, glowFlood, revealRect, revealCircle, dissolveRed, rimPoint, rimDirectionOffset,
   };
 }
 
@@ -502,10 +591,19 @@ function build({ W, H, paths }) {
   moodWrap.append(scene);
   const styleWrap = el('g', { id: 'effectStyleWrap' });
   styleWrap.append(moodWrap);
+  const outlineWrap = el('g', { id: 'effectOutlineWrap' });
+  outlineWrap.append(styleWrap);
   const distortionWrap = el('g', { id: 'effectDistortionWrap' });
-  distortionWrap.append(styleWrap);
+  distortionWrap.append(outlineWrap);
+  const rimLightWrap = el('g', { id: 'effectRimLightWrap' });
+  rimLightWrap.append(distortionWrap);
   const audioGlowWrap = el('g', { id: 'effectAudioGlowWrap' });
-  audioGlowWrap.append(distortionWrap);
+  audioGlowWrap.append(rimLightWrap);
+
+  const backgroundEffects = el('g', { id: 'effectBackgroundWrap' });
+  const auraUse = el('use', { href: '#avatarScene', filter: 'url(#fxAura)', opacity: '.48', display: 'none' });
+  const dropShadow = el('use', { href: '#avatarScene', filter: 'url(#fxDropShadow)', display: 'none' });
+  backgroundEffects.append(dropShadow, auraUse);
 
   const renderedEffects = el('g', { class: 'effect-rendered' });
   const glitchCyan = el('use', { href: '#avatarScene', class: 'effect-glitch effect-glitch-cyan', filter: 'url(#fxCyan)' });
@@ -531,7 +629,7 @@ function build({ W, H, paths }) {
   });
 
   const revealWrap = el('g', { id: 'effectRevealWrap', mask: 'url(#fxRevealMask)' });
-  revealWrap.append(renderedEffects, drawOverlay);
+  revealWrap.append(backgroundEffects, renderedEffects, drawOverlay);
   svg.append(revealWrap);
 
   // Debug overlays
@@ -556,8 +654,12 @@ function build({ W, H, paths }) {
       gestureWrap,
       moodWrap,
       styleWrap,
+      outlineWrap,
       distortionWrap,
+      rimLightWrap,
       audioGlowWrap,
+      auraUse,
+      dropShadow,
       renderedEffects,
       patternRect,
       drawOverlay,
@@ -660,6 +762,7 @@ function createEffectController(svg, effects) {
 
   let config = {
     visualMode: 'normal', colorMood: 'neutral', audioGlow: false, glitch: false,
+    outline: 'none', rimLight: false, aura: false, dropShadow: false,
     distortion: 'none', pattern: 'none', reveal: 'none', effectIntensity: 1, emotionSync: true,
   };
   let emotion = state.emotion;
@@ -677,6 +780,8 @@ function createEffectController(svg, effects) {
     effects.revealCircle.setAttribute('display', 'none');
     effects.revealCircle.setAttribute('r', '0');
     effects.renderedEffects.style.opacity = '1';
+    effects.renderedEffects.removeAttribute('filter');
+    effects.scene.removeAttribute('filter');
     effects.drawOverlay.classList.remove('is-running');
     effects.drawOverlay.style.opacity = '1';
     effects.drawOverlay.style.display = 'none';
@@ -697,7 +802,12 @@ function createEffectController(svg, effects) {
 
   const setEffects = (next) => {
     config = { ...config, ...next, effectIntensity: clamp(next.effectIntensity ?? config.effectIntensity, .25, 2) };
-    const visualMode = ['normal', 'monochrome', 'lineArt', 'neon'].includes(config.visualMode) ? config.visualMode : 'normal';
+    const visualParam = params.get('visual');
+    const visualMode = ['normal', 'monochrome', 'lineArt', 'neon', 'poster'].includes(visualParam || config.visualMode) ? (visualParam || config.visualMode) : 'normal';
+    const outline = params.get('outline') === 'sticker' ? 'sticker' : config.outline;
+    const rimLight = params.has('rim') ? params.get('rim') !== '0' : Boolean(config.rimLight);
+    const aura = params.has('aura') ? params.get('aura') !== '0' : Boolean(config.aura);
+    const dropShadow = params.has('shadow') ? params.get('shadow') !== '0' : Boolean(config.dropShadow);
     const expressionEmotion = config.emotionSync || params.has('emotion') ? emotion : 'neutral';
     effects.expression?.setEmotion(expressionEmotion);
     const requestedMood = config.emotionSync ? EMOTION_MOODS[emotion] : config.colorMood;
@@ -712,6 +822,14 @@ function createEffectController(svg, effects) {
     effects.styleWrap.removeAttribute('filter');
     if (visualMode === 'monochrome') effects.styleWrap.setAttribute('filter', 'url(#fxMonochrome)');
     if (visualMode === 'neon') effects.styleWrap.setAttribute('filter', 'url(#fxNeon)');
+    if (visualMode === 'poster') effects.styleWrap.setAttribute('filter', 'url(#fxPoster)');
+
+    effects.outlineWrap.removeAttribute('filter');
+    if (outline === 'sticker') effects.outlineWrap.setAttribute('filter', 'url(#fxSticker)');
+
+    effects.rimLightWrap.removeAttribute('filter');
+    effects.rimLightWrap.style.filter = '';
+    if (rimLight) effects.rimLightWrap.setAttribute('filter', 'url(#fxRimLight)');
 
     effects.moodWrap.removeAttribute('filter');
     if (mood !== 'neutral') {
@@ -729,6 +847,9 @@ function createEffectController(svg, effects) {
       effects.distortionWrap.setAttribute('filter', 'url(#fxDistortion)');
       if (typeof effects.turbulenceAnimation.beginElement === 'function') effects.turbulenceAnimation.beginElement();
     }
+
+    effects.auraUse.setAttribute('display', aura ? 'inline' : 'none');
+    effects.dropShadow.setAttribute('display', dropShadow ? 'inline' : 'none');
 
     if (pattern === 'none') {
       effects.patternRect.setAttribute('display', 'none');
@@ -768,19 +889,20 @@ function createEffectController(svg, effects) {
   const replayReveal = () => {
     resetReveal();
     const duration = 950;
-    if (config.reveal === 'wipe') {
+    const reveal = params.get('reveal') || config.reveal;
+    if (reveal === 'wipe') {
       effects.revealRect.setAttribute('y', String(effects.H));
       animate(duration, (eased) => effects.revealRect.setAttribute('y', String(effects.H * (1 - eased))));
       return;
     }
-    if (config.reveal === 'iris') {
+    if (reveal === 'iris') {
       effects.revealRect.setAttribute('display', 'none');
       effects.revealCircle.setAttribute('display', 'inline');
       const maxRadius = Math.hypot(effects.W, effects.H) * .58;
       animate(duration, (eased) => effects.revealCircle.setAttribute('r', String(maxRadius * eased)), resetReveal);
       return;
     }
-    if (config.reveal === 'draw') {
+    if (reveal === 'draw') {
       effects.drawOverlay.style.display = 'inline';
       effects.renderedEffects.style.opacity = '0';
       requestAnimationFrame(() => effects.drawOverlay.classList.add('is-running'));
@@ -788,6 +910,22 @@ function createEffectController(svg, effects) {
         effects.renderedEffects.style.opacity = String(progress < .58 ? 0 : Math.min((progress - .58) / .42, 1));
         effects.drawOverlay.style.opacity = String(progress < .72 ? 1 : Math.max(1 - (progress - .72) / .28, 0));
       }, resetReveal);
+      return;
+    }
+    if (reveal === 'dissolve') {
+      effects.scene.setAttribute('filter', 'url(#fxDissolve)');
+      const updateDissolve = (progress) => {
+        effects.renderedEffects.style.opacity = progress <= 0 ? '0' : '1';
+        const threshold = .5 + (.5 - progress) * .6;
+        effects.dissolveRed.setAttribute('slope', '12');
+        effects.dissolveRed.setAttribute('intercept', String(-threshold * 12));
+      };
+      if (params.has('rp')) {
+        updateDissolve(clamp(params.get('rp'), 0, 1));
+      } else {
+        updateDissolve(0);
+        animate(duration, updateDissolve, resetReveal);
+      }
     }
   };
 
@@ -817,7 +955,7 @@ function centerOf(list, fallback) {
 function setT(list, value) { for (const g of list) g.setAttribute('transform', value); }
 function setVis(list, visible) { for (const g of list) g.style.visibility = visible ? 'visible' : 'hidden'; }
 
-function startAnimation(parts, paths, expressionController, gestureWrap, W, H) {
+function startAnimation(parts, paths, expressionController, gestureWrap, rimPoint, rimDirectionOffset, W, H) {
   const M = CFG.motion;
   const of = (name) => paths.filter(p => p.inHead && p.part === name);
   const eyeLc = centerOf(of('eyeL'), { x: 1115, y: 565, top: 480, bottom: 650 });
@@ -834,6 +972,7 @@ function startAnimation(parts, paths, expressionController, gestureWrap, W, H) {
   let previousHeadDeg = 0;
   let saccadeX = 0, saccadeY = 0, saccadeTargetX = 0, saccadeTargetY = 0, nextSaccadeAt = 2.5;
   let doubleBlinkPending = false;
+  let lastRimMouseX = NaN, lastRimMouseY = NaN;
 
   const gestureNames = new Set(['nod', 'tilt', 'jump', 'laugh']);
   const playGesture = (name) => {
@@ -896,6 +1035,16 @@ function startAnimation(parts, paths, expressionController, gestureWrap, W, H) {
       saccadeX = 0; saccadeY = 0;
     }
     if (gestureWrap) setT([gestureWrap], `translate(0 ${pose.sceneY}) ${scaleAbout(W / 2, H, pose.sceneScaleX, pose.sceneScaleY)}`);
+    if (rimPoint && (state.mouse.x !== lastRimMouseX || state.mouse.y !== lastRimMouseY)) {
+      rimPoint.setAttribute('x', String(W * (.5 + state.mouse.x * .35)));
+      rimPoint.setAttribute('y', String(H * (.34 + state.mouse.y * .24)));
+      if (rimDirectionOffset) {
+        rimDirectionOffset.setAttribute('dx', String(-12 - state.mouse.x * 8));
+        rimDirectionOffset.setAttribute('dy', String(14 + state.mouse.y * 8));
+      }
+      lastRimMouseX = state.mouse.x;
+      lastRimMouseY = state.mouse.y;
+    }
     const safeDt = state.fixedT === null ? Math.max(dt, 1 / 120) : 0;
     const headVelocity = safeDt ? (headDeg - previousHeadDeg) / safeDt : 0;
     if (safeDt) {
@@ -995,9 +1144,10 @@ export async function createSvgAvatar(container, srcUrl) {
   const { svg, parts, counts, effects } = build(data);
   container.replaceChildren(svg);
   svg.classList.toggle('debug', state.flags.debug);
-  const stopAnimation = parts ? startAnimation(parts, data.paths, effects?.expression, effects?.gestureWrap, data.W, data.H) : () => {};
+  const stopAnimation = parts ? startAnimation(parts, data.paths, effects?.expression, effects?.gestureWrap, effects?.rimPoint, effects?.rimDirectionOffset, data.W, data.H) : () => {};
   const effectController = createEffectController(svg, effects);
   effectController.setEmotion(state.emotion);
+  if (params.has('reveal')) effectController.replayReveal();
 
   const handleMouseMove = (event) => {
     if (params.has('mx')) return;

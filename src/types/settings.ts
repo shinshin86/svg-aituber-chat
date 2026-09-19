@@ -72,11 +72,11 @@ export interface StreamSettings {
   playAvatarEffectOnComment: boolean;
 }
 
-export type AvatarVisualMode = 'normal' | 'monochrome' | 'lineArt' | 'neon';
+export type AvatarVisualMode = 'normal' | 'monochrome' | 'lineArt' | 'neon' | 'poster';
 export type AvatarColorMood = 'neutral' | 'happy' | 'calm' | 'dramatic' | 'dreamy';
 export type AvatarDistortion = 'none' | 'cyber' | 'water';
 export type AvatarPattern = 'none' | 'aurora' | 'scanlines' | 'dots';
-export type AvatarReveal = 'none' | 'wipe' | 'iris' | 'draw';
+export type AvatarReveal = 'none' | 'wipe' | 'iris' | 'draw' | 'dissolve';
 
 export interface AvatarSettings {
   background: 'white' | 'dark' | 'green';
@@ -93,6 +93,10 @@ export interface AvatarSettings {
   visualMode: AvatarVisualMode;
   colorMood: AvatarColorMood;
   audioGlow: boolean;
+  outline: 'none' | 'sticker';
+  rimLight: boolean;
+  aura: boolean;
+  dropShadow: boolean;
   glitch: boolean;
   distortion: AvatarDistortion;
   pattern: AvatarPattern;
