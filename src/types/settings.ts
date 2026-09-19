@@ -77,6 +77,7 @@ export type AvatarColorMood = 'neutral' | 'happy' | 'calm' | 'dramatic' | 'dream
 export type AvatarDistortion = 'none' | 'cyber' | 'water';
 export type AvatarPattern = 'none' | 'aurora' | 'scanlines' | 'dots';
 export type AvatarReveal = 'none' | 'wipe' | 'iris' | 'draw' | 'dissolve';
+export type AvatarBackdrop = 'none' | 'focusLines' | 'halftone';
 
 export interface AvatarSettings {
   background: 'white' | 'dark' | 'green';
@@ -102,6 +103,9 @@ export interface AvatarSettings {
   pattern: AvatarPattern;
   reveal: AvatarReveal;
   effectIntensity: number;
+  hairHueShift: number;
+  emotionParticles: boolean;
+  backdrop: AvatarBackdrop;
 }
 
 export interface AppSettings {

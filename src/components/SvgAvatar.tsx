@@ -8,6 +8,7 @@ interface AvatarController {
   setVoiceLevel: (value: number, isSpeaking: boolean, mouthWidth?: number) => void;
   setEmotion: (emotion: string) => void;
   playGesture: (name: string) => void;
+  playParticles: (kind: 'heart' | 'star' | 'petal' | 'clap') => void;
   setThinking: (value: boolean) => void;
   setOptions: (options: Record<string, number | boolean>) => void;
   setEffects: (settings: AvatarSettings) => void;

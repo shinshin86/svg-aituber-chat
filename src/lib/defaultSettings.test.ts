@@ -17,6 +17,9 @@ describe('avatar advanced effect settings', () => {
     expect(settings.avatar.visualMode).toBe('normal');
     expect(settings.avatar.reveal).toBe('none');
     expect(settings.avatar.effectIntensity).toBe(1);
+    expect(settings.avatar.hairHueShift).toBe(0);
+    expect(settings.avatar.emotionParticles).toBe(false);
+    expect(settings.avatar.backdrop).toBe('none');
     expect(settings.stream.youtubeEnabled).toBe(false);
     expect(settings.stream.youtubeCommentIntervalMs).toBe(20_000);
   });

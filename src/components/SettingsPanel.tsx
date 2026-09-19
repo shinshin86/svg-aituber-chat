@@ -356,6 +356,22 @@ export function SettingsPanel({
             <input type="checkbox" checked={settings.avatar.dropShadow} onChange={(event) => onUpdateAvatar({ dropShadow: event.target.checked })} />
             <span>シルエットの影</span>
           </label>
+          <label className="field range-field">
+            <span>髪色シフト <b>{settings.avatar.hairHueShift}°</b></span>
+            <input type="range" min="-180" max="180" step="1" value={settings.avatar.hairHueShift} onChange={(event) => onUpdateAvatar({ hairHueShift: Number(event.target.value) })} />
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.emotionParticles} onChange={(event) => onUpdateAvatar({ emotionParticles: event.target.checked })} />
+            <span>感情パーティクル</span>
+          </label>
+          <label className="field">
+            <span>背景演出</span>
+            <select value={settings.avatar.backdrop} onChange={(event) => onUpdateAvatar({ backdrop: event.target.value as AppSettings['avatar']['backdrop'] })}>
+              <option value="none">なし</option>
+              <option value="focusLines">集中線</option>
+              <option value="halftone">ハーフトーン</option>
+            </select>
+          </label>
           <label className="check-field">
             <input
               type="checkbox"

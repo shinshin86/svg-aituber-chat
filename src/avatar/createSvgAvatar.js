@@ -1,3 +1,5 @@
+import { rotateHue } from '../lib/avatarColor';
+
 /*
  * SVG Avatar Demo
  * Loads the VTracer-generated SVG (miko.svg), groups paths automatically by
@@ -23,6 +25,7 @@
  *   ?outline=sticker  Enable the sticker white border
  *   ?rim=1&visual=poster&aura=1&shadow=1  Enable T4 effects
  *   ?reveal=dissolve&rp=0.5  Freeze dissolve progress
+ *   ?hue=120&particles=heart&pt=0.5&backdrop=focusLines  Freeze T5 effects
  *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
  *   ?amp=0        Override the motion amplitude
  *   ?flat=1       Render the original SVG without splitting it
@@ -39,6 +42,7 @@ const CFG = {
     browR: { x1: 1260, y1: 350, x2: 1485, y2: 455 },
     mouth: { x1: 1140, y1: 690, x2: 1320, y2: 800 },
     face:  { x1: 1020, y1: 380, x2: 1480, y2: 830 }, // Paths fully inside this region are not classified as hair
+    ear:   { x1: 1495, y1: 500, x2: 1615, y2: 775 },
   },
   baseIndices: [0, 4], // Static full-body silhouette and outline layers
   skin: '#FDE7DA',     // Skin color used by eyelid and mouth overlays
@@ -58,6 +62,7 @@ const CFG = {
 const params = new URLSearchParams(location.search);
 const EMOTIONS = ['happy', 'sad', 'angry', 'surprised', 'relaxed', 'neutral'];
 const EMOTION_MOODS = { happy: 'happy', sad: 'calm', angry: 'dramatic', surprised: 'dramatic', relaxed: 'dreamy', neutral: 'neutral' };
+const HAIR_BASE_INDICES = new Set([0, 15, 57]);
 const normalizeEmotion = (value) => EMOTIONS.includes(String(value).toLowerCase()) ? String(value).toLowerCase() : 'neutral';
 const state = {
   flags: { breath: true, headSway: true, hairSway: true, blink: true, mouseFollow: true, debug: params.has('debug') },
@@ -109,6 +114,16 @@ const isHairColor = (fill) => {
   return l < 0.72 && s > 0.12 && h >= 0 && h <= 45;
 };
 
+function applyHairHue(root, degrees) {
+  root.querySelectorAll('[data-hue-source]').forEach((path) => {
+    const original = path.getAttribute('data-fill0');
+    if (original) path.setAttribute('fill', rotateHue(original, degrees));
+  });
+  root.querySelectorAll('[data-hair-base-overlay]').forEach((path) => {
+    path.setAttribute('display', degrees === 0 ? 'none' : 'inline');
+  });
+}
+
 async function loadSvg(srcUrl) {
   const response = await fetch(srcUrl);
   if (!response.ok) throw new Error(`SVGの取得に失敗しました (${response.status})`);
@@ -145,13 +160,15 @@ function classify(paths) {
     p.inBody = b.y + b.h > band.top;                 // Include in the body copy
     p.inHead = b.y < band.bottom;                    // Include in the head copy
     p.inBand = b.y < band.bottom && b.y + b.h > band.top; // Include in the transition-band base
+    p.isHairColor = isHairColor(p.fill);
     let part;
     if (CFG.baseIndices.includes(p.i)) part = 'base';
     else if (inRect(b, R.eyeL)) part = 'eyeL';
     else if (inRect(b, R.eyeR)) part = 'eyeR';
     else if (inRect(b, R.mouth)) part = 'mouth';
+    else if (inRect(b, R.ear)) part = 'face';
     else if (inRect(b, R.face)) part = 'face';
-    else if (isHairColor(p.fill)) {
+    else if (p.isHairColor) {
       // Brown paths that substantially overlap the eyes or mouth may contain
       // facial details, so keep them out of the independently moving hair group.
       const ov = Math.max(overlapRatio(b, R.eyeL), overlapRatio(b, R.eyeR), overlapRatio(b, R.mouth));
@@ -382,13 +399,45 @@ function build({ W, H, paths }) {
     return m;
   };
   defs.append(grad('gHead', '#fff', '#000'), grad('gBody', '#000', '#fff'), mask('mHead', 'gHead'), mask('mBody', 'gBody'));
+  const hairBaseClip = el('clipPath', { id: 'cHairBase', clipPathUnits: 'userSpaceOnUse' });
+  hairBaseClip.append(
+    el('rect', { x: 500, y: 0, width: 1520, height: 620 }),
+    el('rect', { x: 500, y: 300, width: 520, height: 680 }),
+    el('rect', { x: 1480, y: 240, width: 540, height: 740 }),
+  );
+  defs.append(hairBaseClip);
   const effectRefs = appendEffectDefinitions(defs, W, H);
   svg.append(defs);
 
-  const clone = (p) => {
+  const clone = (p, allowBaseHue = false) => {
     const node = p.node.cloneNode(true);
     node.setAttribute('data-source-index', p.i);
+    node.setAttribute('data-fill0', p.fill);
+    if ((HAIR_BASE_INDICES.has(p.i) && p.i !== 0) || (p.part === 'hair' && p.inHead && p.box.y < CFG.neckBand.top) || (allowBaseHue && p.i === 0)) node.setAttribute('data-hue-source', 'hair');
+    if (allowBaseHue && p.i === 0) node.setAttribute('clip-path', 'url(#cHairBase)');
+    node.setAttribute('data-i', p.i);
     return node;
+  };
+  const hairBaseMask = el('mask', { id: 'mHairBase', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: W, height: H });
+  hairBaseMask.append(el('rect', { x: 0, y: 0, width: W, height: H, fill: '#000' }));
+  paths.filter((p) => p.part === 'hair').forEach((p) => {
+    const node = p.node.cloneNode(true);
+    node.setAttribute('fill', '#fff');
+    node.setAttribute('stroke', '#fff');
+    node.setAttribute('stroke-width', '120');
+    node.setAttribute('stroke-linejoin', 'round');
+    hairBaseMask.append(node);
+  });
+  defs.append(hairBaseMask);
+  const cloneHairBaseOverlay = () => {
+    const base = paths.find((p) => p.i === 0);
+    const node = clone(base);
+    node.setAttribute('data-hair-base-overlay', '1');
+    node.setAttribute('data-hue-source', 'hair');
+    node.setAttribute('display', 'none');
+    const wrapper = el('g', { mask: 'url(#mHairBase)' });
+    wrapper.append(node);
+    return wrapper;
   };
   if (state.flat) {
     const g = el('g', { id: 'flat' });
@@ -403,10 +452,16 @@ function build({ W, H, paths }) {
   clipBand.append(el('rect', { x: 0, y: band.top, width: W, height: band.bottom - band.top }));
   defs.append(clipBand);
   const gBand = el('g', { id: 'bandBase', 'clip-path': 'url(#cBand)' });
-  paths.filter(p => p.inBand).forEach(p => gBand.append(clone(p)));
+  paths.filter(p => p.inBand).forEach((p) => {
+    gBand.append(clone(p));
+    if (p.i === 0) gBand.append(cloneHairBaseOverlay());
+  });
 
   const gBody = el('g', { id: 'body' });
-  paths.filter(p => p.inBody).forEach(p => gBody.append(clone(p)));
+  paths.filter(p => p.inBody).forEach((p) => {
+    gBody.append(clone(p));
+    if (p.i === 0) gBody.append(cloneHairBaseOverlay());
+  });
   const bodyWrap = el('g', { mask: 'url(#mBody)' });
   bodyWrap.append(gBody);
 
@@ -422,7 +477,8 @@ function build({ W, H, paths }) {
       gHead.append(cur.g);
       parts[p.part].push(cur.g);
     }
-    cur.g.append(clone(p));
+    cur.g.append(clone(p, p.part === 'hair' && p.inHead));
+    if (p.i === 0) cur.g.append(cloneHairBaseOverlay());
   }
 
   const R = CFG.regions;
@@ -532,7 +588,7 @@ function build({ W, H, paths }) {
   const browShape = (Rr) => {
     const x1 = Rr.x1 + 25, x2 = Rr.x2 - 25, cx = (x1 + x2) / 2, y = Rr.y1 + 45;
     const cover = el('path', { d: `M${x1 - 18} ${y + 10} Q${cx} ${y - 34} ${x2 + 18} ${y + 8} Q${cx} ${y + 30} ${x1 - 18} ${y + 10} Z`, fill: CFG.skin });
-    const brow = el('path', { d: `M${x1} ${y + 9} Q${cx} ${y - 30} ${x2} ${y + 4} Q${cx} ${y + 16} ${x1} ${y + 9} Z`, fill: '#4a251b' });
+    const brow = el('path', { d: `M${x1} ${y + 9} Q${cx} ${y - 30} ${x2} ${y + 4} Q${cx} ${y + 16} ${x1} ${y + 9} Z`, fill: '#4a251b', 'data-fill0': '#4a251b', 'data-hue-source': 'brow' });
     const g = el('g', { class: 'emotion-brow', opacity: 0 });
     g.append(cover, brow);
     return g;
@@ -613,12 +669,33 @@ function build({ W, H, paths }) {
   });
   renderedEffects.append(glitchCyan, glitchPink, audioGlowWrap, patternRect);
 
+  const backdropPattern = el('pattern', { id: 'fxHalftone', width: 32, height: 32, patternUnits: 'userSpaceOnUse' });
+  backdropPattern.append(el('circle', { cx: 10, cy: 10, r: 10, fill: '#ff6b9d', opacity: '.35' }));
+  defs.append(backdropPattern);
+  const backdropGroup = el('g', { id: 'avatarBackdrop', display: 'none', 'pointer-events': 'none' });
+  const focusLines = el('g', { 'data-backdrop': 'focusLines', fill: params.get('bg') === 'dark' ? '#f4d8e6' : '#3B110C', opacity: '.55' });
+  for (let i = 0; i < 48; i += 1) {
+    const angle = (i / 48) * Math.PI * 2;
+    const inner = W * (.22 + (i % 5) * .008);
+    const outer = W * (.58 + ((i * 17) % 23) / 100);
+    const width = .008 + ((i * 13) % 7) / 1000;
+    const cx = W / 2, cy = H * .47;
+    const p1 = `${cx + Math.cos(angle - width) * inner} ${cy + Math.sin(angle - width) * inner}`;
+    const p2 = `${cx + Math.cos(angle - width * .2) * outer} ${cy + Math.sin(angle - width * .2) * outer}`;
+    const p3 = `${cx + Math.cos(angle + width * .2) * outer} ${cy + Math.sin(angle + width * .2) * outer}`;
+    const p4 = `${cx + Math.cos(angle + width) * inner} ${cy + Math.sin(angle + width) * inner}`;
+    focusLines.append(el('path', { d: `M${p1} L${p2} L${p3} L${p4} Z` }));
+  }
+  const halftone = el('rect', { 'data-backdrop': 'halftone', x: 0, y: 0, width: W, height: H, fill: 'url(#fxHalftone)', opacity: '.5' });
+  backdropGroup.append(focusLines, halftone);
+
   // The draw-on effect clones the group structure, removes fills, and animates
   // each path outline in sequence.
   const drawOverlay = scene.cloneNode(true);
   drawOverlay.removeAttribute('id');
   drawOverlay.setAttribute('class', 'effect-draw');
   drawOverlay.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+  drawOverlay.querySelectorAll('[data-hair-base-overlay]').forEach(node => node.remove());
   drawOverlay.querySelectorAll('path').forEach((path) => {
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', CFG.lineColor);
@@ -629,8 +706,10 @@ function build({ W, H, paths }) {
   });
 
   const revealWrap = el('g', { id: 'effectRevealWrap', mask: 'url(#fxRevealMask)' });
-  revealWrap.append(backgroundEffects, renderedEffects, drawOverlay);
+  revealWrap.append(backdropGroup, backgroundEffects, renderedEffects, drawOverlay);
   svg.append(revealWrap);
+  const particleGroup = el('g', { id: 'avatarParticles', 'pointer-events': 'none' });
+  svg.append(particleGroup);
 
   // Debug overlays
   const dbg = el('g', { class: 'debug-only', fill: 'none', 'stroke-width': 3 });
@@ -664,6 +743,8 @@ function build({ W, H, paths }) {
       patternRect,
       drawOverlay,
       revealWrap,
+      backdropGroup,
+      particleGroup,
       expression: createExpressionController(expressionRefs, state.emotion),
     },
   };
@@ -764,12 +845,15 @@ function createEffectController(svg, effects) {
     visualMode: 'normal', colorMood: 'neutral', audioGlow: false, glitch: false,
     outline: 'none', rimLight: false, aura: false, dropShadow: false,
     distortion: 'none', pattern: 'none', reveal: 'none', effectIntensity: 1, emotionSync: true,
+    hairHueShift: 0, emotionParticles: false, backdrop: 'none',
   };
   let emotion = state.emotion;
   let audioLevel = 0;
   let speaking = false;
   let revealFrameId = 0;
   let revealRunId = 0;
+  let particleFrameId = 0;
+  let debugParticlesStarted = false;
 
   const clamp = (value, min, max) => Math.min(Math.max(Number(value) || 0, min), max);
   const resetReveal = () => {
@@ -800,6 +884,64 @@ function createEffectController(svg, effects) {
     effects.glowFlood.setAttribute('flood-opacity', String(speaking ? .22 + activeLevel * .68 : .06));
   };
 
+  const setBackdrop = (value) => {
+    const backdrop = ['none', 'focusLines', 'halftone'].includes(value) ? value : 'none';
+    effects.backdropGroup.setAttribute('display', backdrop === 'none' ? 'none' : 'inline');
+    effects.backdropGroup.querySelectorAll('[data-backdrop]').forEach((node) => {
+      node.setAttribute('display', node.getAttribute('data-backdrop') === backdrop ? 'inline' : 'none');
+    });
+  };
+
+  const particleShape = (kind, x, y, size, color) => {
+    if (kind === 'heart') return el('path', { d: `M${x} ${y + size * .25} C${x - size} ${y - size * .55} ${x - size * 1.2} ${y + size * .65} ${x} ${y + size * 1.2} C${x + size * 1.2} ${y + size * .65} ${x + size} ${y - size * .55} ${x} ${y + size * .25} Z`, fill: color });
+    if (kind === 'star') {
+      const points = Array.from({ length: 10 }, (_, i) => {
+        const angle = -Math.PI / 2 + i * Math.PI / 5;
+        const radius = i % 2 ? size * .42 : size;
+        return `${x + Math.cos(angle) * radius},${y + Math.sin(angle) * radius}`;
+      }).join(' ');
+      return el('polygon', { points, fill: color });
+    }
+    if (kind === 'clap') return el('path', { d: `M${x - size * .95} ${y - size * .35} L${x - size * .2} ${y - size * .08} M${x + size * .95} ${y - size * .35} L${x + size * .2} ${y - size * .08} M${x - size * .65} ${y + size * .65} L${x - size * .12} ${y + size * .15} M${x + size * .65} ${y + size * .65} L${x + size * .12} ${y + size * .15}`, stroke: color, 'stroke-width': Math.max(4, size * .18), 'stroke-linecap': 'round', fill: 'none' });
+    return el('ellipse', { cx: x, cy: y, rx: size * .55, ry: size, fill: color, transform: `rotate(-28 ${x} ${y})` });
+  };
+
+  const playParticles = (kind = 'heart') => {
+    cancelAnimationFrame(particleFrameId);
+    effects.particleGroup.replaceChildren();
+    const particleKind = ['heart', 'star', 'petal', 'clap'].includes(kind) ? kind : 'heart';
+    const particles = Array.from({ length: 28 }, (_, i) => {
+      const seed = (i * 37 + 11) % 101 / 101;
+      const angle = seed * Math.PI * 2;
+      const distance = effects.W * (.16 + ((i * 17) % 53) / 100);
+      const startX = effects.W / 2 + Math.cos(angle) * effects.W * .12;
+      const startY = effects.H * .46 + Math.sin(angle) * effects.H * .13;
+      const endX = effects.W / 2 + Math.cos(angle) * distance;
+      const endY = effects.H * .44 + Math.sin(angle) * distance;
+      const node = particleShape(particleKind, startX, startY, (18 + (i % 5) * 5) * (particleKind === 'heart' ? 1.6 : 1), i % 2 ? '#ff6b9d' : '#ffd166');
+      effects.particleGroup.append(node);
+      return { node, startX, startY, endX, endY, spin: (i % 2 ? 1 : -1) * (180 + i * 7), duration: 1200 + (i % 7) * 100, delay: (i % 6) * 35 };
+    });
+    const started = performance.now();
+    const fixedProgress = params.has('pt') ? clamp(params.get('pt'), 0, 1) : null;
+    const frame = (now) => {
+      const elapsed = now - started;
+      let active = false;
+      particles.forEach((particle) => {
+        const progress = fixedProgress ?? Math.min(Math.max((elapsed - particle.delay) / particle.duration, 0), 1);
+        if (fixedProgress === null && progress < 1) active = true;
+        const eased = 1 - Math.pow(1 - progress, 2);
+        const x = particle.startX + (particle.endX - particle.startX) * eased;
+        const y = particle.startY + (particle.endY - particle.startY) * eased;
+        particle.node.setAttribute('transform', `translate(${x - particle.startX} ${y - particle.startY}) rotate(${particle.spin * eased} ${particle.startX} ${particle.startY})`);
+        particle.node.setAttribute('opacity', String(fixedProgress === null ? Math.min(progress * 5, 1) * Math.min((1 - progress) * 5, 1) : 1));
+      });
+      if (active) particleFrameId = requestAnimationFrame(frame);
+      else if (fixedProgress === null) effects.particleGroup.replaceChildren();
+    };
+    particleFrameId = requestAnimationFrame(frame);
+  };
+
   const setEffects = (next) => {
     config = { ...config, ...next, effectIntensity: clamp(next.effectIntensity ?? config.effectIntensity, .25, 2) };
     const visualParam = params.get('visual');
@@ -814,10 +956,18 @@ function createEffectController(svg, effects) {
     const mood = Object.prototype.hasOwnProperty.call(MOOD_MATRICES, requestedMood) ? requestedMood : 'neutral';
     const distortion = ['cyber', 'water'].includes(config.distortion) ? config.distortion : 'none';
     const pattern = ['aurora', 'scanlines', 'dots'].includes(config.pattern) ? config.pattern : 'none';
+    const hairHueShift = params.has('hue') ? clamp(params.get('hue'), -180, 180) : clamp(config.hairHueShift, -180, 180);
+    const backdrop = params.get('backdrop') || config.backdrop;
 
     svg.dataset.visualMode = visualMode;
     svg.dataset.glitch = config.glitch ? 'true' : 'false';
     svg.style.setProperty('--effect-intensity', String(config.effectIntensity));
+    applyHairHue(svg, hairHueShift);
+    setBackdrop(backdrop);
+    if (params.has('particles') && !debugParticlesStarted) {
+      debugParticlesStarted = true;
+      playParticles(params.get('particles'));
+    }
 
     effects.styleWrap.removeAttribute('filter');
     if (visualMode === 'monochrome') effects.styleWrap.setAttribute('filter', 'url(#fxMonochrome)');
@@ -869,6 +1019,11 @@ function createEffectController(svg, effects) {
     emotion = normalizeEmotion(value);
     svg.dataset.emotion = emotion;
     effects.expression?.setEmotion(emotion);
+    if (config.emotionParticles && emotion !== 'neutral') {
+      if (emotion === 'happy') playParticles('heart');
+      if (emotion === 'surprised') playParticles('star');
+      if (emotion === 'angry') setBackdrop('focusLines');
+    }
     setEffects(config);
   };
 
@@ -932,13 +1087,18 @@ function createEffectController(svg, effects) {
   return {
     setEffects,
     setEmotion,
+    playParticles,
     setAudioLevel(value, isSpeaking) {
       audioLevel = clamp(value, 0, 1);
       speaking = Boolean(isSpeaking);
       updateAudioGlow();
     },
     replayReveal,
-    destroy: resetReveal,
+    destroy() {
+      resetReveal();
+      cancelAnimationFrame(particleFrameId);
+      effects.particleGroup.replaceChildren();
+    },
   };
 }
 
@@ -1189,6 +1349,9 @@ export async function createSvgAvatar(container, srcUrl) {
     },
     playGesture(name) {
       state.playGesture(String(name));
+    },
+    playParticles(kind) {
+      effectController.playParticles(String(kind));
     },
     setThinking(value) {
       state.setThinking(value);
