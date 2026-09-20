@@ -312,6 +312,8 @@ export function SettingsPanel({
               <option value="lineArt">線画</option>
               <option value="neon">ネオン</option>
               <option value="poster">ポスター</option>
+              <option value="halftone">ハーフトーン</option>
+              <option value="duotone">デュオトーン</option>
             </select>
           </label>
           <label className="field">

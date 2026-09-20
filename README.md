@@ -58,6 +58,8 @@ Add parameters to the URL to freeze an expression or effect without configuring 
 | `?thinking=1` | Show the thinking gaze. |
 | `?outline=sticker`, `?rim=1`, `?aura=1`, `?shadow=1` | Show the sticker outline, rim light, aura, or drop shadow. |
 | `?visual=poster` | Use the poster look. |
+| `?visual=halftone` | Add comic-style dots to darker regions. |
+| `?visual=duotone&mood=dramatic` | Map brightness to a two- or three-color palette; the palette follows the color mood (`mood`). |
 | `?reveal=dissolve&rp=0.5` | Hold the entrance effect at a progress from 0 to 1. |
 | `?hue=120` | Rotate the hair hue between -180 and 180 degrees. |
 | `?particles=heart&pt=0.5` | Hold particles (`heart`, `star`, `petal`, `clap`) at a progress from 0 to 1. |

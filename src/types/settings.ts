@@ -73,7 +73,7 @@ export interface StreamSettings {
   commentReactions: boolean;
 }
 
-export type AvatarVisualMode = 'normal' | 'monochrome' | 'lineArt' | 'neon' | 'poster';
+export type AvatarVisualMode = 'normal' | 'monochrome' | 'lineArt' | 'neon' | 'poster' | 'halftone' | 'duotone';
 export type AvatarColorMood = 'neutral' | 'happy' | 'calm' | 'dramatic' | 'dreamy';
 export type AvatarDistortion = 'none' | 'cyber' | 'water';
 export type AvatarPattern = 'none' | 'aurora' | 'scanlines' | 'dots';

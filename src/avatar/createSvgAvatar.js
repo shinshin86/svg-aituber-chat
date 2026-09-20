@@ -23,6 +23,7 @@ import { rotateHue } from '../lib/avatarColor';
  *   ?gesture=nod|tilt|jump|laugh&gt=0.35  Freeze a gesture pose
  *   ?thinking=1    Freeze the thinking gaze
  *   ?outline=sticker  Enable the sticker white border
+ *   ?visual=halftone|duotone&mood=dramatic  Debug shading styles and mood palette
  *   ?rim=1&visual=poster&aura=1&shadow=1  Enable filter effects
  *   ?reveal=dissolve&rp=0.5  Freeze dissolve progress
  *   ?hue=120&particles=heart&pt=0.5&backdrop=focusLines  Freeze hue, particle, and backdrop effects
@@ -192,6 +193,17 @@ const MOOD_MATRICES = {
   dramatic: '1.22 -0.08 -0.05 0 -0.03  -0.05 1.13 -0.05 0 -0.01  -0.04 -0.05 1.18 0 -0.02  0 0 0 1 0',
   dreamy: '1.02 0.04 0.08 0 0.02  0.02 0.96 0.08 0 0.01  0.08 0.02 1.08 0 0.03  0 0 0 1 0',
 };
+const DUOTONE_PALETTES = {
+  neutral: ['#1b2a49', '#f5e9d0'],
+  happy: ['#7a1f3d', '#ffe9a8'],
+  calm: ['#0f3b57', '#d8f3ff'],
+  dramatic: ['#2a0a0a', '#ff5a36', '#ffe2c4'],
+  dreamy: ['#2d1b4e', '#f7c6ff'],
+};
+const hexToRgbTable = (colors) => colors.map((color) => {
+  const value = color.replace('#', '');
+  return [0, 2, 4].map((index) => (parseInt(value.slice(index, index + 2), 16) / 255).toFixed(4));
+});
 const blendMoodMatrix = (values, amount = .5) => values.split(/\s+/).map((value, index) => {
   const target = Number(value);
   const identity = [0, 6, 12, 18].includes(index) ? 1 : 0;
@@ -325,6 +337,44 @@ function appendEffectDefinitions(defs, W, H) {
   );
   posterFilter.append(posterTransfer);
 
+  const halftoneBaseFilter = el('filter', { id: 'fxHalftoneBase', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const halftoneBaseTransfer = el('feComponentTransfer', { in: 'SourceGraphic' });
+  halftoneBaseTransfer.append(
+    el('feFuncR', { type: 'linear', slope: 1.08, intercept: .04 }),
+    el('feFuncG', { type: 'linear', slope: 1.08, intercept: .04 }),
+    el('feFuncB', { type: 'linear', slope: 1.08, intercept: .04 }),
+    el('feFuncA', { type: 'identity' }),
+  );
+  halftoneBaseFilter.append(halftoneBaseTransfer);
+  const halftoneLumaFilter = el('filter', { id: 'fxHalftoneLuma', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const halftoneLumaMatrix = el('feColorMatrix', {
+    in: 'SourceGraphic', type: 'matrix',
+    values: '0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  -.2126 -.7152 -.0722 0 1',
+    result: 'halftoneLuma',
+  });
+  const halftoneLumaTransfer = el('feComponentTransfer', { in: 'halftoneLuma' });
+  halftoneLumaTransfer.append(el('feFuncA', { type: 'table', tableValues: '1 .72 .18 0' }));
+  halftoneLumaFilter.append(halftoneLumaMatrix, halftoneLumaTransfer);
+  const halftoneMask = el('mask', { id: 'fxHalftoneMask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: W, height: H, style: 'mask-type:alpha' });
+  halftoneMask.append(el('use', { href: '#avatarScene', filter: 'url(#fxHalftoneLuma)' }));
+  const halftonePattern = el('pattern', { id: 'fxHalftoneDots', width: 26, height: 26, patternUnits: 'userSpaceOnUse' });
+  halftonePattern.append(el('circle', { cx: 13, cy: 13, r: 8, fill: '#3b110c' }));
+
+  const duotoneFilter = el('filter', { id: 'fxDuotone', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const duotoneLuma = el('feColorMatrix', {
+    in: 'SourceGraphic', type: 'matrix',
+    values: '.2126 .7152 .0722 0 0  .2126 .7152 .0722 0 0  .2126 .7152 .0722 0 0  0 0 0 1 0',
+    result: 'duotoneLuma',
+  });
+  const duotoneTransfer = el('feComponentTransfer', { in: 'duotoneLuma' });
+  const duotoneFuncs = {
+    r: el('feFuncR', { type: 'table', tableValues: '0.1059 0.9608' }),
+    g: el('feFuncG', { type: 'table', tableValues: '0.1647 0.9137' }),
+    b: el('feFuncB', { type: 'table', tableValues: '0.2863 0.8157' }),
+  };
+  duotoneTransfer.append(duotoneFuncs.r, duotoneFuncs.g, duotoneFuncs.b, el('feFuncA', { type: 'identity' }));
+  duotoneFilter.append(duotoneLuma, duotoneTransfer);
+
   const dissolveFilter = el('filter', { id: 'fxDissolve', ...filterBox, 'color-interpolation-filters': 'sRGB' });
   const dissolveNoise = el('feTurbulence', { type: 'fractalNoise', baseFrequency: '.02', numOctaves: 2, seed: 17, result: 'dissolveNoise', 'color-interpolation-filters': 'sRGB' });
   const dissolveAlphaFixed = el('feColorMatrix', {
@@ -421,6 +471,9 @@ function appendEffectDefinitions(defs, W, H) {
     stickerFilter,
     rimFilter,
     posterFilter,
+    halftoneBaseFilter,
+    halftoneLumaFilter,
+    duotoneFilter,
     dissolveFilter,
     auraFilter,
     dropShadowFilter,
@@ -431,6 +484,8 @@ function appendEffectDefinitions(defs, W, H) {
     hairStripes,
     hairHologram,
     shineGradient,
+    halftoneMask,
+    halftonePattern,
     silhouetteMask,
     revealMask,
   );
@@ -438,7 +493,7 @@ function appendEffectDefinitions(defs, W, H) {
   return {
     W, H, moodMatrix, turbulence, turbulenceAnimation, displacement,
     wobbleFullNoise, wobbleFullDisplacement, wobbleEdgeNoise, wobbleEdgeDisplacement, wobbleEdgeErode,
-    hairStars, hairStripes, hairHologram, shineGradient,
+    hairStars, hairStripes, hairHologram, shineGradient, halftoneMask, halftonePattern, duotoneFuncs,
     glowDilate, glowBlur, glowFlood, revealRect, revealCircle, dissolveRed, rimPoint, rimDirectionOffset,
   };
 }
@@ -734,6 +789,8 @@ function build({ W, H, paths }) {
   const gestureWrap = el('g', { id: 'avatarGestureWrap' });
   gestureWrap.append(gBand, bodyWrap, headWrap);
   scene.append(gestureWrap);
+  // Resolve the luminance mask after the referenced scene exists in the SVG tree.
+  effectRefs.halftoneMask.replaceChildren(el('use', { href: '#avatarScene', filter: 'url(#fxHalftoneLuma)' }));
   const moodWrap = el('g', { id: 'effectMoodWrap' });
   moodWrap.append(scene);
   const styleWrap = el('g', { id: 'effectStyleWrap' });
@@ -760,10 +817,32 @@ function build({ W, H, paths }) {
   const patternRect = el('rect', {
     class: 'effect-pattern', x: 0, y: 0, width: W, height: H, mask: 'url(#fxSilhouetteMask)', display: 'none',
   });
+  const halftoneRect = el('rect', {
+    class: 'effect-halftone', x: 0, y: 0, width: W, height: H, fill: 'url(#fxHalftoneDots)', mask: 'url(#fxHalftoneMask)', display: 'none', opacity: '.9',
+  });
+  const halftoneClip = el('clipPath', { id: 'fxHalftoneClip', clipPathUnits: 'userSpaceOnUse' });
+  paths.filter((path) => !CFG.baseIndices.includes(path.i) && path.box.w < W * .9 && path.box.h < H * .95)
+    .forEach((path) => halftoneClip.append(path.node.cloneNode(true)));
+  defs.append(halftoneClip);
+  const halftoneWrap = el('g', { class: 'effect-halftone-wrap', mask: 'url(#fxSilhouetteMask)', 'clip-path': 'url(#fxHalftoneClip)', display: 'none', 'pointer-events': 'none' });
+  halftoneWrap.append(halftoneRect);
+  const halftoneOverlay = el('g', { class: 'effect-halftone-overlay', display: 'none', opacity: '.82', 'pointer-events': 'none' });
+  const pathLuma = (fill) => {
+    const value = String(fill || '').replace('#', '');
+    if (value.length !== 6) return 1;
+    const rgb = [0, 2, 4].map((index) => parseInt(value.slice(index, index + 2), 16) / 255);
+    return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+  };
+  paths.filter((path) => !CFG.baseIndices.includes(path.i) && pathLuma(path.fill) < .62).forEach((path) => {
+    const node = path.node.cloneNode(true);
+    node.setAttribute('fill', 'url(#fxHalftoneDots)');
+    node.setAttribute('stroke', 'none');
+    halftoneOverlay.append(node);
+  });
   const shineWrap = el('g', { id: 'effectShineWrap', display: params.has('shine') ? 'inline' : 'none', mask: 'url(#fxSilhouetteMask)', 'pointer-events': 'none' });
   const shineBand = el('rect', { x: -150, y: -H * .2, width: 300, height: H * 1.4, fill: 'url(#fxShine)', transform: `rotate(45 ${W / 2} ${H / 2})` });
   shineWrap.append(shineBand);
-  renderedEffects.append(glitchCyan, glitchPink, wobbleWrap, patternRect);
+  renderedEffects.append(glitchCyan, glitchPink, wobbleWrap, patternRect, halftoneOverlay);
 
   const backdropPattern = el('pattern', { id: 'fxHalftone', width: 32, height: 32, patternUnits: 'userSpaceOnUse' });
   backdropPattern.append(el('circle', { cx: 10, cy: 10, r: 10, fill: '#ff6b9d', opacity: '.35' }));
@@ -840,6 +919,10 @@ function build({ W, H, paths }) {
       dropShadow,
       renderedEffects,
       patternRect,
+      halftoneRect,
+      halftoneWrap,
+      halftoneOverlay,
+      duotoneFuncs: effectRefs.duotoneFuncs,
       hairPatternOverlay,
       hairPatternOverlayRect,
       hairPatternBaseNodes,
@@ -1170,14 +1253,15 @@ function createEffectController(svg, effects) {
   const setEffects = (next) => {
     config = { ...config, ...next, effectIntensity: clamp(next.effectIntensity ?? config.effectIntensity, .25, 2) };
     const visualParam = params.get('visual');
-    const visualMode = ['normal', 'monochrome', 'lineArt', 'neon', 'poster'].includes(visualParam || config.visualMode) ? (visualParam || config.visualMode) : 'normal';
+    const visualModes = ['normal', 'monochrome', 'lineArt', 'neon', 'poster', 'halftone', 'duotone'];
+    const visualMode = visualModes.includes(visualParam || config.visualMode) ? (visualParam || config.visualMode) : 'normal';
     const outline = params.get('outline') === 'sticker' ? 'sticker' : config.outline;
     const rimLight = params.has('rim') ? params.get('rim') !== '0' : Boolean(config.rimLight);
     const aura = params.has('aura') ? params.get('aura') !== '0' : Boolean(config.aura);
     const dropShadow = params.has('shadow') ? params.get('shadow') !== '0' : Boolean(config.dropShadow);
     const expressionEmotion = config.emotionSync || params.has('emotion') ? emotion : 'neutral';
     effects.expression?.setEmotion(expressionEmotion);
-    const requestedMood = config.emotionSync ? EMOTION_MOODS[emotion] : config.colorMood;
+    const requestedMood = params.get('mood') || (config.emotionSync ? EMOTION_MOODS[emotion] : config.colorMood);
     const mood = Object.prototype.hasOwnProperty.call(MOOD_MATRICES, requestedMood) ? requestedMood : 'neutral';
     const distortion = ['cyber', 'water'].includes(config.distortion) ? config.distortion : 'none';
     const pattern = ['aurora', 'scanlines', 'dots'].includes(config.pattern) ? config.pattern : 'none';
@@ -1207,6 +1291,15 @@ function createEffectController(svg, effects) {
     if (visualMode === 'monochrome') effects.styleWrap.setAttribute('filter', 'url(#fxMonochrome)');
     if (visualMode === 'neon') effects.styleWrap.setAttribute('filter', 'url(#fxNeon)');
     if (visualMode === 'poster') effects.styleWrap.setAttribute('filter', 'url(#fxPoster)');
+    if (visualMode === 'halftone') effects.styleWrap.setAttribute('filter', 'url(#fxHalftoneBase)');
+    if (visualMode === 'duotone') {
+      const table = hexToRgbTable(DUOTONE_PALETTES[mood] ?? DUOTONE_PALETTES.neutral);
+      effects.duotoneFuncs.r.setAttribute('tableValues', table.map((rgb) => rgb[0]).join(' '));
+      effects.duotoneFuncs.g.setAttribute('tableValues', table.map((rgb) => rgb[1]).join(' '));
+      effects.duotoneFuncs.b.setAttribute('tableValues', table.map((rgb) => rgb[2]).join(' '));
+      effects.styleWrap.setAttribute('filter', 'url(#fxDuotone)');
+    }
+    effects.halftoneOverlay.setAttribute('display', visualMode === 'halftone' ? 'inline' : 'none');
 
     effects.outlineWrap.removeAttribute('filter');
     if (outline === 'sticker') effects.outlineWrap.setAttribute('filter', 'url(#fxSticker)');
