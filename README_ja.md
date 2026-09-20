@@ -63,6 +63,7 @@ URLにパラメータを付けると、LLMやTTSを設定しなくても表情�
 | `?particles=heart&pt=0.5` | パーティクル（`heart`、`star`、`petal`、`clap`）を進行度0〜1の位置で止めます。 |
 | `?backdrop=focusLines` | 背景に集中線（`focusLines`）またはハーフトーン（`halftone`）を表示します。 |
 | `?comment=かわいい` | 起動の1秒後に、指定した文をコメントとして1回だけ反応させます。 |
+| `?wobble=full&wseed=3` | アバター全体（`full`）または輪郭だけ（`edge`）を手描き風に揺らします。`wseed`でノイズの種を固定できます。 |
 | `?bg=dark` | 背景色を`white`、`dark`、`green`から選びます。 |
 | `?t=1.5&mx=0&my=0` | アニメーションの時刻とポインター位置を固定します。 |
 | `?blink=1`、`?debug=1`、`?flat=1` | まばたき中で固定、領域の枠を表示、分割前のSVGをそのまま表示します。 |

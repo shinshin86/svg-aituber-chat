@@ -393,6 +393,19 @@ export function SettingsPanel({
             </select>
           </label>
           <label className="field">
+            <span>手描き風のぷるぷる線</span>
+            <select
+              aria-label="手描き風のぷるぷる線"
+              value={settings.avatar.wobble}
+              onChange={(event) => onUpdateAvatar({ wobble: event.target.value as AppSettings['avatar']['wobble'] })}
+            >
+              <option value="none">なし</option>
+              <option value="full">全身</option>
+              <option value="edge">輪郭のみ</option>
+            </select>
+            <small>輪郭の揺らぎは軽い更新間隔で動作します。</small>
+          </label>
+          <label className="field">
             <span>キャラクター内の模様</span>
             <select
               aria-label="キャラクター内の模様"

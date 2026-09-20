@@ -26,6 +26,7 @@ import { rotateHue } from '../lib/avatarColor';
  *   ?rim=1&visual=poster&aura=1&shadow=1  Enable filter effects
  *   ?reveal=dissolve&rp=0.5  Freeze dissolve progress
  *   ?hue=120&particles=heart&pt=0.5&backdrop=focusLines  Freeze hue, particle, and backdrop effects
+ *   ?wobble=full|edge&wseed=3  Show hand-drawn wobble with an optional fixed seed
  *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
  *   ?comment=cute  Trigger one comment keyword reaction after startup
  *   ?amp=0        Override the motion amplitude
@@ -242,6 +243,29 @@ function appendEffectDefinitions(defs, W, H) {
   });
   distortionFilter.append(turbulence, displacement);
 
+  const wobbleFullFilter = el('filter', { id: 'fxWobbleFull', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const wobbleFullNoise = el('feTurbulence', {
+    type: 'fractalNoise', baseFrequency: '.015', numOctaves: 1, seed: 3, result: 'wobbleFullNoise',
+  });
+  const wobbleFullDisplacement = el('feDisplacementMap', {
+    in: 'SourceGraphic', in2: 'wobbleFullNoise', scale: 0, xChannelSelector: 'R', yChannelSelector: 'B',
+  });
+  wobbleFullFilter.append(wobbleFullNoise, wobbleFullDisplacement);
+
+  const wobbleEdgeFilter = el('filter', { id: 'fxWobbleEdge', ...filterBox, 'color-interpolation-filters': 'sRGB' });
+  const wobbleEdgeNoise = el('feTurbulence', {
+    type: 'fractalNoise', baseFrequency: '.015', numOctaves: 1, seed: 3, result: 'wobbleEdgeNoise',
+  });
+  const wobbleEdgeDisplacement = el('feDisplacementMap', {
+    in: 'SourceGraphic', in2: 'wobbleEdgeNoise', scale: 0, xChannelSelector: 'R', yChannelSelector: 'B', result: 'wobbleEdgeDisplaced',
+  });
+  const wobbleEdgeErode = el('feMorphology', { in: 'SourceAlpha', operator: 'erode', radius: 28, result: 'wobbleEdgeInnerAlpha' });
+  const wobbleEdgeBlur = el('feGaussianBlur', { in: 'wobbleEdgeInnerAlpha', stdDeviation: 6, result: 'wobbleEdgeInnerAlphaBlur' });
+  const wobbleEdgeInner = el('feComposite', { in: 'SourceGraphic', in2: 'wobbleEdgeInnerAlphaBlur', operator: 'in', result: 'wobbleEdgeInner' });
+  const wobbleEdgeMerge = el('feMerge');
+  wobbleEdgeMerge.append(el('feMergeNode', { in: 'wobbleEdgeDisplaced' }), el('feMergeNode', { in: 'wobbleEdgeInner' }));
+  wobbleEdgeFilter.append(wobbleEdgeNoise, wobbleEdgeDisplacement, wobbleEdgeErode, wobbleEdgeBlur, wobbleEdgeInner, wobbleEdgeMerge);
+
   const audioGlowFilter = el('filter', { id: 'fxAudioGlow', ...filterBox, 'color-interpolation-filters': 'sRGB' });
   const glowDilate = el('feMorphology', { in: 'SourceAlpha', operator: 'dilate', radius: 2, result: 'glowDilate' });
   const glowBlur = el('feGaussianBlur', { in: 'glowDilate', stdDeviation: 3, result: 'glowBlur' });
@@ -364,6 +388,8 @@ function appendEffectDefinitions(defs, W, H) {
     tintFilter('fxCyan', 'cyan'),
     tintFilter('fxPink', 'pink'),
     distortionFilter,
+    wobbleFullFilter,
+    wobbleEdgeFilter,
     audioGlowFilter,
     stickerFilter,
     rimFilter,
@@ -380,6 +406,7 @@ function appendEffectDefinitions(defs, W, H) {
 
   return {
     W, H, moodMatrix, turbulence, turbulenceAnimation, displacement,
+    wobbleFullNoise, wobbleFullDisplacement, wobbleEdgeNoise, wobbleEdgeDisplacement, wobbleEdgeErode,
     glowDilate, glowBlur, glowFlood, revealRect, revealCircle, dissolveRed, rimPoint, rimDirectionOffset,
   };
 }
@@ -656,6 +683,8 @@ function build({ W, H, paths }) {
   rimLightWrap.append(distortionWrap);
   const audioGlowWrap = el('g', { id: 'effectAudioGlowWrap' });
   audioGlowWrap.append(rimLightWrap);
+  const wobbleWrap = el('g', { id: 'effectWobbleWrap' });
+  wobbleWrap.append(audioGlowWrap);
 
   const backgroundEffects = el('g', { id: 'effectBackgroundWrap' });
   const auraUse = el('use', { href: '#avatarScene', filter: 'url(#fxAura)', opacity: '.48', display: 'none' });
@@ -668,7 +697,7 @@ function build({ W, H, paths }) {
   const patternRect = el('rect', {
     class: 'effect-pattern', x: 0, y: 0, width: W, height: H, mask: 'url(#fxSilhouetteMask)', display: 'none',
   });
-  renderedEffects.append(glitchCyan, glitchPink, audioGlowWrap, patternRect);
+  renderedEffects.append(glitchCyan, glitchPink, wobbleWrap, patternRect);
 
   const backdropPattern = el('pattern', { id: 'fxHalftone', width: 32, height: 32, patternUnits: 'userSpaceOnUse' });
   backdropPattern.append(el('circle', { cx: 10, cy: 10, r: 10, fill: '#ff6b9d', opacity: '.35' }));
@@ -738,6 +767,7 @@ function build({ W, H, paths }) {
       distortionWrap,
       rimLightWrap,
       audioGlowWrap,
+      wobbleWrap,
       auraUse,
       dropShadow,
       renderedEffects,
@@ -851,7 +881,7 @@ function createEffectController(svg, effects) {
     visualMode: 'normal', colorMood: 'neutral', audioGlow: false, glitch: false,
     outline: 'none', rimLight: false, aura: false, dropShadow: false,
     distortion: 'none', pattern: 'none', reveal: 'none', effectIntensity: 1, emotionSync: true,
-    hairHueShift: 0, emotionParticles: false, backdrop: 'none',
+    hairHueShift: 0, emotionParticles: false, backdrop: 'none', wobble: 'none',
   };
   let emotion = state.emotion;
   let audioLevel = 0;
@@ -859,6 +889,9 @@ function createEffectController(svg, effects) {
   let revealFrameId = 0;
   let revealRunId = 0;
   let particleFrameId = 0;
+  let wobbleFrameId = 0;
+  let wobbleLastAt = -Infinity;
+  let wobbleSeed = 3;
   let debugParticlesStarted = false;
 
   const clamp = (value, min, max) => Math.min(Math.max(Number(value) || 0, min), max);
@@ -888,6 +921,42 @@ function createEffectController(svg, effects) {
     effects.glowDilate.setAttribute('radius', String(1.5 + activeLevel * 9 * intensity));
     effects.glowBlur.setAttribute('stdDeviation', String(2.5 + activeLevel * 6 * intensity));
     effects.glowFlood.setAttribute('flood-opacity', String(speaking ? .22 + activeLevel * .68 : .06));
+  };
+
+  const stopWobbleLoop = () => {
+    cancelAnimationFrame(wobbleFrameId);
+    wobbleFrameId = 0;
+  };
+
+  const updateWobbleLoop = (mode, intensity) => {
+    stopWobbleLoop();
+    if (mode === 'none') {
+      effects.wobbleWrap.removeAttribute('filter');
+      return;
+    }
+    const fixedSeed = params.has('wseed') || params.has('t');
+    if (params.has('wseed')) wobbleSeed = Math.round(clamp(params.get('wseed'), 0, 9999));
+    else if (params.has('t')) wobbleSeed = 3;
+    const scale = String((mode === 'edge' ? 22 : 14) * intensity);
+    const filterId = mode === 'edge' ? 'fxWobbleEdge' : 'fxWobbleFull';
+    effects.wobbleWrap.setAttribute('filter', `url(#${filterId})`);
+    effects.wobbleFullDisplacement.setAttribute('scale', scale);
+    effects.wobbleEdgeDisplacement.setAttribute('scale', scale);
+    const applySeed = () => {
+      effects.wobbleFullNoise.setAttribute('seed', String(wobbleSeed));
+      effects.wobbleEdgeNoise.setAttribute('seed', String(wobbleSeed));
+    };
+    applySeed();
+    if (fixedSeed) return;
+    const frame = (now) => {
+      if (now - wobbleLastAt >= 100) {
+        wobbleLastAt = now;
+        wobbleSeed = (wobbleSeed + 1) % 10000;
+        applySeed();
+      }
+      wobbleFrameId = requestAnimationFrame(frame);
+    };
+    wobbleFrameId = requestAnimationFrame(frame);
   };
 
   const setBackdrop = (value) => {
@@ -965,6 +1034,8 @@ function createEffectController(svg, effects) {
     const pattern = ['aurora', 'scanlines', 'dots'].includes(config.pattern) ? config.pattern : 'none';
     const hairHueShift = params.has('hue') ? clamp(params.get('hue'), -180, 180) : clamp(config.hairHueShift, -180, 180);
     const backdrop = params.get('backdrop') || config.backdrop;
+    const wobbleParam = params.get('wobble');
+    const wobble = ['none', 'full', 'edge'].includes(wobbleParam || config.wobble) ? (wobbleParam || config.wobble) : 'none';
 
     svg.dataset.visualMode = visualMode;
     svg.dataset.glitch = config.glitch ? 'true' : 'false';
@@ -1020,6 +1091,7 @@ function createEffectController(svg, effects) {
     const glowColors = { neutral: '#ff5f86', happy: '#ff8a3d', calm: '#38d8ff', dramatic: '#ff315f', dreamy: '#aa6cff' };
     effects.glowFlood.setAttribute('flood-color', glowColors[mood] ?? glowColors.neutral);
     updateAudioGlow();
+    updateWobbleLoop(wobble, config.effectIntensity);
   };
 
   const setEmotion = (value) => {
@@ -1105,6 +1177,7 @@ function createEffectController(svg, effects) {
     destroy() {
       resetReveal();
       cancelAnimationFrame(particleFrameId);
+      stopWobbleLoop();
       effects.particleGroup.replaceChildren();
     },
   };

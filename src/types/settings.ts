@@ -79,6 +79,7 @@ export type AvatarDistortion = 'none' | 'cyber' | 'water';
 export type AvatarPattern = 'none' | 'aurora' | 'scanlines' | 'dots';
 export type AvatarReveal = 'none' | 'wipe' | 'iris' | 'draw' | 'dissolve';
 export type AvatarBackdrop = 'none' | 'focusLines' | 'halftone';
+export type AvatarWobble = 'none' | 'full' | 'edge';
 
 export interface AvatarSettings {
   background: 'white' | 'dark' | 'green';
@@ -107,6 +108,7 @@ export interface AvatarSettings {
   hairHueShift: number;
   emotionParticles: boolean;
   backdrop: AvatarBackdrop;
+  wobble: AvatarWobble;
 }
 
 export interface AppSettings {

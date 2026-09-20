@@ -63,6 +63,7 @@ Add parameters to the URL to freeze an expression or effect without configuring 
 | `?particles=heart&pt=0.5` | Hold particles (`heart`, `star`, `petal`, `clap`) at a progress from 0 to 1. |
 | `?backdrop=focusLines` | Show focus lines (`focusLines`) or halftone dots (`halftone`) behind the avatar. |
 | `?comment=cute` | React once to the given text as a comment, one second after startup. |
+| `?wobble=full&wseed=3` | Show a hand-drawn wobble on the whole avatar (`full`) or only its outline (`edge`); `wseed` fixes the noise seed. |
 | `?bg=dark` | Choose the background: `white`, `dark`, or `green`. |
 | `?t=1.5&mx=0&my=0` | Freeze the animation time and pointer position. |
 | `?blink=1`, `?debug=1`, `?flat=1` | Freeze mid-blink, show region boundaries, or render the original SVG without splitting it. |
