@@ -86,6 +86,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     emotionParticles: false,
     backdrop: 'none',
     wobble: 'none',
+    hairPattern: 'none',
   },
   stream: {
     youtubeApiKey: '',

@@ -21,6 +21,7 @@ describe('avatar advanced effect settings', () => {
     expect(settings.avatar.emotionParticles).toBe(false);
     expect(settings.avatar.backdrop).toBe('none');
     expect(settings.avatar.wobble).toBe('none');
+    expect(settings.avatar.hairPattern).toBe('none');
     expect(settings.stream.youtubeEnabled).toBe(false);
     expect(settings.stream.youtubeCommentIntervalMs).toBe(20_000);
     expect(settings.stream.commentReactions).toBe(true);

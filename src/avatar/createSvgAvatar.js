@@ -27,6 +27,8 @@ import { rotateHue } from '../lib/avatarColor';
  *   ?reveal=dissolve&rp=0.5  Freeze dissolve progress
  *   ?hue=120&particles=heart&pt=0.5&backdrop=focusLines  Freeze hue, particle, and backdrop effects
  *   ?wobble=full|edge&wseed=3  Show hand-drawn wobble with an optional fixed seed
+ *   ?hairfx=stars|stripes|hologram  Show a hair pattern
+ *   ?shine=0.5  Hold the diagonal shine at a progress from 0 to 1
  *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
  *   ?comment=cute  Trigger one comment keyword reaction after startup
  *   ?amp=0        Override the motion amplitude
@@ -374,6 +376,31 @@ function appendEffectDefinitions(defs, W, H) {
     el('animateTransform', { attributeName: 'patternTransform', type: 'translate', from: '0 0', to: '32 32', dur: '4.5s', repeatCount: 'indefinite' }),
   );
 
+  const hairStars = el('pattern', { id: 'fxHairStars', width: 120, height: 120, patternUnits: 'userSpaceOnUse' });
+  hairStars.append(
+    el('circle', { cx: 18, cy: 24, r: 16, fill: '#ffffff' }),
+    el('circle', { cx: 78, cy: 66, r: 11, fill: '#fff1b8' }),
+    el('circle', { cx: 108, cy: 18, r: 8, fill: '#e4c7ff' }),
+  );
+  const hairStripes = el('pattern', { id: 'fxHairStripes', width: 220, height: 220, patternUnits: 'userSpaceOnUse' });
+  hairStripes.append(
+    el('path', { d: 'M-110 220 L110 0 M110 330 L330 110', stroke: '#fff', 'stroke-width': 60, opacity: '.7', fill: 'none' }),
+  );
+  const hairHologram = el('linearGradient', { id: 'fxHairHologram', gradientUnits: 'userSpaceOnUse', x1: 880, y1: 0, x2: 1850, y2: 0 });
+  hairHologram.append(
+    el('stop', { offset: 0, 'stop-color': '#ff5fa2' }),
+    el('stop', { offset: '.24', 'stop-color': '#ffd25f' }),
+    el('stop', { offset: '.48', 'stop-color': '#7dff8a' }),
+    el('stop', { offset: '.72', 'stop-color': '#5fd2ff' }),
+    el('stop', { offset: 1, 'stop-color': '#b57dff' }),
+  );
+  const shineGradient = el('linearGradient', { id: 'fxShine', gradientUnits: 'userSpaceOnUse', x1: 0, y1: 0, x2: 300, y2: 0 });
+  shineGradient.append(
+    el('stop', { offset: 0, 'stop-color': '#fff', 'stop-opacity': 0 }),
+    el('stop', { offset: '.5', 'stop-color': '#fff', 'stop-opacity': '.75' }),
+    el('stop', { offset: 1, 'stop-color': '#fff', 'stop-opacity': 0 }),
+  );
+
   const silhouetteMask = el('mask', { id: 'fxSilhouetteMask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: W, height: H, style: 'mask-type:alpha' });
   silhouetteMask.append(el('use', { href: '#avatarScene' }));
   const revealMask = el('mask', { id: 'fxRevealMask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: W, height: H });
@@ -400,6 +427,10 @@ function appendEffectDefinitions(defs, W, H) {
     aurora,
     scanlines,
     dots,
+    hairStars,
+    hairStripes,
+    hairHologram,
+    shineGradient,
     silhouetteMask,
     revealMask,
   );
@@ -407,6 +438,7 @@ function appendEffectDefinitions(defs, W, H) {
   return {
     W, H, moodMatrix, turbulence, turbulenceAnimation, displacement,
     wobbleFullNoise, wobbleFullDisplacement, wobbleEdgeNoise, wobbleEdgeDisplacement, wobbleEdgeErode,
+    hairStars, hairStripes, hairHologram, shineGradient,
     glowDilate, glowBlur, glowFlood, revealRect, revealCircle, dissolveRed, rimPoint, rimDirectionOffset,
   };
 }
@@ -457,6 +489,33 @@ function build({ W, H, paths }) {
     hairBaseMask.append(node);
   });
   defs.append(hairBaseMask);
+  const hairPatternBaseNodes = [];
+  const cloneHairPatternBaseOverlay = () => {
+    const wrapper = el('g', { class: 'hair-pattern-base-overlay', mask: 'url(#mHairBase)', display: 'none' });
+    const shape = el('g', { mask: 'url(#mHairBaseShape)' });
+    const rect = el('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#fxHairStars)' });
+    shape.append(rect);
+    wrapper.append(shape);
+    hairPatternBaseNodes.push({ rect, wrapper });
+    return wrapper;
+  };
+  const hairPathsMask = el('mask', { id: 'mHairPaths', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: W, height: H });
+  hairPathsMask.append(el('rect', { x: 0, y: 0, width: W, height: H, fill: '#000' }));
+  paths.filter((p) => p.part === 'hair').forEach((p) => {
+    const node = p.node.cloneNode(true);
+    node.setAttribute('fill', '#fff');
+    node.setAttribute('stroke', 'none');
+    hairPathsMask.append(node);
+  });
+  // Hair patterns must never reach the neck, shoulders, or clothing below the band.
+  hairPathsMask.append(el('rect', { x: 0, y: CFG.neckBand.bottom, width: W, height: H - CFG.neckBand.bottom, fill: '#000' }));
+  const hairBaseShapeMask = el('mask', { id: 'mHairBaseShape', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: W, height: H });
+  hairBaseShapeMask.append(el('rect', { x: 0, y: 0, width: W, height: H, fill: '#000' }));
+  const baseShape = paths.find((p) => p.i === 0).node.cloneNode(true);
+  baseShape.setAttribute('fill', '#fff');
+  baseShape.setAttribute('stroke', 'none');
+  hairBaseShapeMask.append(baseShape);
+  defs.append(hairPathsMask, hairBaseShapeMask);
   const cloneHairBaseOverlay = () => {
     const base = paths.find((p) => p.i === 0);
     const node = clone(base);
@@ -482,13 +541,13 @@ function build({ W, H, paths }) {
   const gBand = el('g', { id: 'bandBase', 'clip-path': 'url(#cBand)' });
   paths.filter(p => p.inBand).forEach((p) => {
     gBand.append(clone(p));
-    if (p.i === 0) gBand.append(cloneHairBaseOverlay());
+    if (p.i === 0) gBand.append(cloneHairBaseOverlay(), cloneHairPatternBaseOverlay());
   });
 
   const gBody = el('g', { id: 'body' });
   paths.filter(p => p.inBody).forEach((p) => {
     gBody.append(clone(p));
-    if (p.i === 0) gBody.append(cloneHairBaseOverlay());
+    if (p.i === 0) gBody.append(cloneHairBaseOverlay(), cloneHairPatternBaseOverlay());
   });
   const bodyWrap = el('g', { mask: 'url(#mBody)' });
   bodyWrap.append(gBody);
@@ -506,7 +565,7 @@ function build({ W, H, paths }) {
       parts[p.part].push(cur.g);
     }
     cur.g.append(clone(p, p.part === 'hair' && p.inHead));
-    if (p.i === 0) cur.g.append(cloneHairBaseOverlay());
+    if (p.i === 0) cur.g.append(cloneHairBaseOverlay(), cloneHairPatternBaseOverlay());
   }
 
   const R = CFG.regions;
@@ -659,6 +718,10 @@ function build({ W, H, paths }) {
   Object.values(expressionGroups).forEach((group) => expressionGroup.append(group));
   Object.values(markGroups).forEach((group) => expressionGroup.append(group));
   gHead.append(expressionGroup);
+  const hairPatternOverlay = el('g', { class: 'effect-hair-pattern', display: 'none', opacity: '.55', mask: 'url(#mHairPaths)', 'pointer-events': 'none' });
+  const hairPatternOverlayRect = el('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#fxHairStars)' });
+  hairPatternOverlay.append(hairPatternOverlayRect);
+  gHead.append(hairPatternOverlay);
   const markCenters = {
     happy: [heartX, heartY + 40], sad: [sweatX, sweatY + 48], angry: [angerX, angerY], surprised: [surpriseX + 30, surpriseY + 48], relaxed: [0, 0], neutral: [0, 0],
   };
@@ -697,6 +760,9 @@ function build({ W, H, paths }) {
   const patternRect = el('rect', {
     class: 'effect-pattern', x: 0, y: 0, width: W, height: H, mask: 'url(#fxSilhouetteMask)', display: 'none',
   });
+  const shineWrap = el('g', { id: 'effectShineWrap', display: params.has('shine') ? 'inline' : 'none', mask: 'url(#fxSilhouetteMask)', 'pointer-events': 'none' });
+  const shineBand = el('rect', { x: -150, y: -H * .2, width: 300, height: H * 1.4, fill: 'url(#fxShine)', transform: `rotate(45 ${W / 2} ${H / 2})` });
+  shineWrap.append(shineBand);
   renderedEffects.append(glitchCyan, glitchPink, wobbleWrap, patternRect);
 
   const backdropPattern = el('pattern', { id: 'fxHalftone', width: 32, height: 32, patternUnits: 'userSpaceOnUse' });
@@ -725,7 +791,7 @@ function build({ W, H, paths }) {
   drawOverlay.removeAttribute('id');
   drawOverlay.setAttribute('class', 'effect-draw');
   drawOverlay.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
-  drawOverlay.querySelectorAll('[data-hair-base-overlay]').forEach(node => node.remove());
+  drawOverlay.querySelectorAll('[data-hair-base-overlay], [data-hair-pattern-base], .hair-pattern-base-overlay').forEach(node => node.remove());
   drawOverlay.querySelectorAll('path').forEach((path) => {
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', CFG.lineColor);
@@ -738,6 +804,8 @@ function build({ W, H, paths }) {
   const revealWrap = el('g', { id: 'effectRevealWrap', mask: 'url(#fxRevealMask)' });
   revealWrap.append(backdropGroup, backgroundEffects, renderedEffects, drawOverlay);
   svg.append(revealWrap);
+  // Keep the one-shot shine outside the reveal mask so it remains visible at a fixed debug progress.
+  svg.append(shineWrap);
   const particleGroup = el('g', { id: 'avatarParticles', 'pointer-events': 'none' });
   svg.append(particleGroup);
 
@@ -772,6 +840,14 @@ function build({ W, H, paths }) {
       dropShadow,
       renderedEffects,
       patternRect,
+      hairPatternOverlay,
+      hairPatternOverlayRect,
+      hairPatternBaseNodes,
+      hairStars: effectRefs.hairStars,
+      hairStripes: effectRefs.hairStripes,
+      hairHologram: effectRefs.hairHologram,
+      shineBand,
+      shineWrap,
       drawOverlay,
       revealWrap,
       backdropGroup,
@@ -874,7 +950,7 @@ function createExpressionController(expressionRefs, initialEmotion = 'neutral') 
 
 function createEffectController(svg, effects) {
   if (!effects) {
-    return { setEffects() {}, setEmotion() {}, setAudioLevel() {}, replayReveal() {}, destroy() {} };
+    return { setEffects() {}, setEmotion() {}, setAudioLevel() {}, playShine() {}, replayReveal() {}, destroy() {} };
   }
 
   let config = {
@@ -892,6 +968,11 @@ function createEffectController(svg, effects) {
   let wobbleFrameId = 0;
   let wobbleLastAt = -Infinity;
   let wobbleSeed = 3;
+  let hairPatternFrameId = 0;
+  let hairPatternLastAt = -Infinity;
+  let shineFrameId = 0;
+  let shineRunId = 0;
+  let debugShineStarted = false;
   let debugParticlesStarted = false;
 
   const clamp = (value, min, max) => Math.min(Math.max(Number(value) || 0, min), max);
@@ -957,6 +1038,74 @@ function createEffectController(svg, effects) {
       wobbleFrameId = requestAnimationFrame(frame);
     };
     wobbleFrameId = requestAnimationFrame(frame);
+  };
+
+  const stopHairPatternLoop = () => {
+    cancelAnimationFrame(hairPatternFrameId);
+    hairPatternFrameId = 0;
+  };
+
+  const updateHairPattern = (pattern) => {
+    stopHairPatternLoop();
+    const fills = { stars: 'url(#fxHairStars)', stripes: 'url(#fxHairStripes)', hologram: 'url(#fxHairHologram)' };
+    if (pattern === 'none') {
+      effects.hairPatternOverlay.setAttribute('display', 'none');
+      effects.hairPatternBaseNodes.forEach(({ wrapper }) => wrapper.setAttribute('display', 'none'));
+      return;
+    }
+    const opacity = pattern === 'stars' ? '.85' : pattern === 'stripes' ? '.6' : '.55';
+    effects.hairPatternOverlay.setAttribute('display', 'inline');
+    effects.hairPatternOverlay.setAttribute('fill', fills[pattern]);
+    effects.hairPatternOverlay.setAttribute('opacity', opacity);
+    effects.hairPatternOverlayRect.setAttribute('fill', fills[pattern]);
+    effects.hairPatternBaseNodes.forEach(({ rect, wrapper }) => {
+      rect.setAttribute('fill', fills[pattern]);
+      wrapper.setAttribute('display', 'inline');
+      wrapper.setAttribute('opacity', opacity);
+    });
+    const fixed = params.has('t') || params.has('mx') || params.has('my');
+    const frame = (now) => {
+      if (now - hairPatternLastAt >= 120) {
+        hairPatternLastAt = now;
+        if (pattern === 'stripes') {
+          const offset = ((now % 5200) / 5200) * -260;
+          effects.hairStripes.setAttribute('patternTransform', `translate(${offset} 0)`);
+        }
+        if (pattern === 'hologram') {
+          const angle = params.has('mx') || params.has('my')
+            ? state.mouse.x * 28 + state.mouse.y * 12
+            : (state.fixedT === null ? now / 24 : 0);
+          effects.hairHologram.setAttribute('gradientTransform', `rotate(${angle} ${effects.W / 2} ${effects.H / 2})`);
+        }
+      }
+      if (!fixed) hairPatternFrameId = requestAnimationFrame(frame);
+    };
+    frame(params.has('t') ? state.fixedT * 1000 : performance.now());
+  };
+
+  const playShine = () => {
+    const runId = ++shineRunId;
+    cancelAnimationFrame(shineFrameId);
+    effects.shineWrap.setAttribute('display', 'inline');
+    const fixedProgress = params.has('shine') ? clamp(params.get('shine'), 0, 1) : null;
+    const apply = (progress) => {
+      const offset = 710 + progress * 1280;
+      effects.shineBand.setAttribute('transform', `translate(${offset} 0) rotate(-20 ${effects.W / 2} ${effects.H / 2})`);
+    };
+    if (fixedProgress !== null) {
+      apply(fixedProgress);
+      return;
+    }
+    let startedAt = null;
+    const frame = (now) => {
+      if (runId !== shineRunId) return;
+      if (startedAt === null) startedAt = now;
+      const progress = Math.min(Math.max((now - startedAt) / 600, 0), 1);
+      apply(progress);
+      if (progress < 1) shineFrameId = requestAnimationFrame(frame);
+      else effects.shineWrap.setAttribute('display', 'none');
+    };
+    shineFrameId = requestAnimationFrame(frame);
   };
 
   const setBackdrop = (value) => {
@@ -1036,6 +1185,8 @@ function createEffectController(svg, effects) {
     const backdrop = params.get('backdrop') || config.backdrop;
     const wobbleParam = params.get('wobble');
     const wobble = ['none', 'full', 'edge'].includes(wobbleParam || config.wobble) ? (wobbleParam || config.wobble) : 'none';
+    const hairfxParam = params.get('hairfx');
+    const hairfx = ['none', 'stars', 'stripes', 'hologram'].includes(hairfxParam || config.hairPattern) ? (hairfxParam || config.hairPattern) : 'none';
 
     svg.dataset.visualMode = visualMode;
     svg.dataset.glitch = config.glitch ? 'true' : 'false';
@@ -1045,6 +1196,11 @@ function createEffectController(svg, effects) {
     if (params.has('particles') && !debugParticlesStarted) {
       debugParticlesStarted = true;
       playParticles(params.get('particles'));
+    }
+    updateHairPattern(hairfx);
+    if (params.has('shine') && !debugShineStarted) {
+      debugShineStarted = true;
+      playShine();
     }
 
     effects.styleWrap.removeAttribute('filter');
@@ -1095,9 +1251,11 @@ function createEffectController(svg, effects) {
   };
 
   const setEmotion = (value) => {
+    const previousEmotion = emotion;
     emotion = normalizeEmotion(value);
     svg.dataset.emotion = emotion;
     effects.expression?.setEmotion(emotion);
+    if (config.autoGesture && previousEmotion !== 'happy' && emotion === 'happy') playShine();
     if (config.emotionParticles && emotion !== 'neutral') {
       if (emotion === 'happy') playParticles('heart');
       if (emotion === 'surprised') playParticles('star');
@@ -1168,6 +1326,7 @@ function createEffectController(svg, effects) {
     setEffects,
     setEmotion,
     playParticles,
+    playShine,
     setAudioLevel(value, isSpeaking) {
       audioLevel = clamp(value, 0, 1);
       speaking = Boolean(isSpeaking);
@@ -1178,6 +1337,9 @@ function createEffectController(svg, effects) {
       resetReveal();
       cancelAnimationFrame(particleFrameId);
       stopWobbleLoop();
+      stopHairPatternLoop();
+      cancelAnimationFrame(shineFrameId);
+      shineRunId += 1;
       effects.particleGroup.replaceChildren();
     },
   };
@@ -1433,6 +1595,9 @@ export async function createSvgAvatar(container, srcUrl) {
     },
     playParticles(kind) {
       effectController.playParticles(String(kind));
+    },
+    playShine() {
+      effectController.playShine();
     },
     setThinking(value) {
       state.setThinking(value);

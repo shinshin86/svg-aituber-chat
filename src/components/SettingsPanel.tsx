@@ -419,6 +419,19 @@ export function SettingsPanel({
             </select>
           </label>
           <label className="field">
+            <span>髪の模様</span>
+            <select
+              aria-label="髪の模様"
+              value={settings.avatar.hairPattern}
+              onChange={(event) => onUpdateAvatar({ hairPattern: event.target.value as AppSettings['avatar']['hairPattern'] })}
+            >
+              <option value="none">なし</option>
+              <option value="stars">星空ドット</option>
+              <option value="stripes">流れる光の筋</option>
+              <option value="hologram">ホログラム</option>
+            </select>
+          </label>
+          <label className="field">
             <span>登場・切替演出</span>
             <select
               aria-label="登場・切替演出"
