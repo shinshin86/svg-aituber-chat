@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useVoiceOptions } from '../hooks/useVoiceOptions';
 import { LLM_PROVIDERS, TTS_ENGINES, supportsAudioLipSync } from '../lib/providerCatalog';
-import type { AppSettings, LlmProvider, TtsEngine, TtsProfile } from '../types/settings';
+import type { AppSettings, AvatarSettings, LlmProvider, TtsEngine, TtsProfile } from '../types/settings';
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -354,9 +354,17 @@ export function SettingsPanel({
             <input type="checkbox" checked={settings.avatar.rimLight} onChange={(event) => onUpdateAvatar({ rimLight: event.target.checked })} />
             <span>リムライト</span>
           </label>
-          <label className="check-field">
-            <input type="checkbox" checked={settings.avatar.aura} onChange={(event) => onUpdateAvatar({ aura: event.target.checked })} />
+          <label className="field">
             <span>背後オーラ</span>
+            <select value={settings.avatar.aura} onChange={(event) => onUpdateAvatar({ aura: event.target.value as AvatarSettings['aura'] })}>
+              <option value="none">なし</option>
+              <option value="glow">グロー</option>
+              <option value="flame">炎</option>
+            </select>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.voiceEcho} onChange={(event) => onUpdateAvatar({ voiceEcho: event.target.checked })} />
+            <span>音量連動シルエットエコー</span>
           </label>
           <label className="check-field">
             <input type="checkbox" checked={settings.avatar.dropShadow} onChange={(event) => onUpdateAvatar({ dropShadow: event.target.checked })} />

@@ -12,7 +12,8 @@ describe('avatar advanced effect settings', () => {
     expect(settings.avatar.autoGesture).toBe(true);
     expect(settings.avatar.outline).toBe('none');
     expect(settings.avatar.rimLight).toBe(false);
-    expect(settings.avatar.aura).toBe(false);
+    expect(settings.avatar.aura).toBe('none');
+    expect(settings.avatar.voiceEcho).toBe(false);
     expect(settings.avatar.dropShadow).toBe(false);
     expect(settings.avatar.visualMode).toBe('normal');
     expect(settings.avatar.reveal).toBe('none');
@@ -41,6 +42,12 @@ describe('avatar advanced effect settings', () => {
     expect(settings.avatar.visualMode).toBe('lineArt');
     expect(settings.avatar.glitch).toBe(true);
     expect(settings.avatar.pattern).toBe('aurora');
+  });
+
+  it('migrates legacy boolean aura settings', () => {
+    expect(mergeStoredSettings({ avatar: { aura: true } }).avatar.aura).toBe('glow');
+    expect(mergeStoredSettings({ avatar: { aura: false } }).avatar.aura).toBe('none');
+    expect(mergeStoredSettings({ avatar: { aura: 'flame' } }).avatar.aura).toBe('flame');
   });
 
   it('keeps saved YouTube stream settings while filling new defaults', () => {

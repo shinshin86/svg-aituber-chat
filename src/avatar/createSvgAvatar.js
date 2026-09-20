@@ -25,7 +25,7 @@ import { DEFAULT_PATTERN_TEXT, formatPatternText } from '../lib/patternText';
  *   ?thinking=1    Freeze the thinking gaze
  *   ?outline=sticker  Enable the sticker white border
  *   ?visual=halftone|duotone&mood=dramatic  Debug shading styles and mood palette
- *   ?rim=1&visual=poster&aura=1&shadow=1  Enable filter effects
+ *   ?rim=1&visual=poster&aura=1|flame&shadow=1&echo=0.6  Enable filter effects
  *   ?reveal=dissolve&rp=0.5  Freeze dissolve progress
  *   ?hue=120&particles=heart&pt=0.5&backdrop=focusLines  Freeze hue, particle, and backdrop effects
  *   ?wobble=full|edge&wseed=3  Show hand-drawn wobble with an optional fixed seed
@@ -398,6 +398,36 @@ function appendEffectDefinitions(defs, W, H) {
     el('feComposite', { in: 'auraColor', in2: 'auraBlur', operator: 'in', result: 'aura' }),
   );
 
+  const flameFilterBox = { filterUnits: 'userSpaceOnUse', x: -420, y: -420, width: W + 840, height: H + 840 };
+  const createFlameFilter = (id, blur, color, opacity, dy, radius) => {
+    const filter = el('filter', { id, ...flameFilterBox, 'color-interpolation-filters': 'sRGB' });
+    const dilated = el('feMorphology', { in: 'SourceAlpha', operator: 'dilate', radius, result: `${id}Dilated` });
+    const noise = el('feTurbulence', { type: 'fractalNoise', baseFrequency: '.010 .035', numOctaves: 2, seed: 19, result: `${id}Noise` });
+    const noiseOffset = el('feOffset', { in: `${id}Noise`, dx: 0, dy: 0, result: `${id}NoiseOffset` });
+    const displaced = el('feDisplacementMap', { in: `${id}Dilated`, in2: `${id}NoiseOffset`, scale: 180, xChannelSelector: 'R', yChannelSelector: 'G', result: `${id}Displaced` });
+    const offset = el('feOffset', { in: `${id}Displaced`, dx: 0, dy, result: `${id}Offset` });
+    const blurNode = el('feGaussianBlur', { in: `${id}Offset`, stdDeviation: blur, result: `${id}Blur` });
+    const flood = el('feFlood', { 'flood-color': color, 'flood-opacity': opacity, result: `${id}Color` });
+    const composite = el('feComposite', { in: `${id}Color`, in2: `${id}Blur`, operator: 'in' });
+    filter.append(dilated, noise, noiseOffset, displaced, offset, blurNode, flood, composite);
+    return { filter, noiseOffset };
+  };
+  const flameOuter = [-70, -150, -240].map((dy, index) => createFlameFilter(`fxAuraFlameOuter${index}`, 22, '#ff5a1f', .7 * [1, .5, .25][index], dy, 30));
+  const flameInner = [-70, -150, -240].map((dy, index) => createFlameFilter(`fxAuraFlameInner${index}`, 8, '#ffd23f', .9 * [1, .5, .25][index], dy, 12));
+  const createEchoFilter = (id, radius) => {
+    const filter = el('filter', { id, ...filterBox, 'color-interpolation-filters': 'sRGB' });
+    const dilate = el('feMorphology', { in: 'SourceAlpha', operator: 'dilate', radius, result: `${id}Dilated` });
+    const inner = el('feMorphology', { in: 'SourceAlpha', operator: 'dilate', radius: Math.max(1, radius - 16), result: `${id}Inner` });
+    const ring = el('feComposite', { in: `${id}Dilated`, in2: `${id}Inner`, operator: 'out', result: `${id}Ring` });
+    const flood = el('feFlood', { 'flood-color': '#38d8ff', 'flood-opacity': 1, result: `${id}Color` });
+    const composite = el('feComposite', { in: `${id}Color`, in2: `${id}Ring`, operator: 'in' });
+    filter.append(dilate, inner, ring, flood, composite);
+    return { filter, dilate, inner, flood };
+  };
+  const echo14 = createEchoFilter('fxVoiceEcho14', 20);
+  const echo30 = createEchoFilter('fxVoiceEcho30', 48);
+  const echo48 = createEchoFilter('fxVoiceEcho48', 80);
+
   const dropShadowFilter = el('filter', { id: 'fxDropShadow', ...filterBox, 'color-interpolation-filters': 'sRGB' });
   const dropShadowBlur = el('feGaussianBlur', { in: 'SourceAlpha', stdDeviation: 8, result: 'dropShadowBlur' });
   const dropShadowOffset = el('feOffset', { in: 'dropShadowBlur', dx: 12, dy: 14, result: 'dropShadowOffset' });
@@ -461,8 +491,8 @@ function appendEffectDefinitions(defs, W, H) {
 
   const silhouetteMask = el('mask', { id: 'fxSilhouetteMask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: W, height: H, style: 'mask-type:alpha' });
   silhouetteMask.append(el('use', { href: '#avatarScene' }));
-  const revealMask = el('mask', { id: 'fxRevealMask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: W, height: H });
-  const revealRect = el('rect', { x: 0, y: 0, width: W, height: H, fill: '#fff' });
+  const revealMask = el('mask', { id: 'fxRevealMask', maskUnits: 'userSpaceOnUse', x: -420, y: -420, width: W + 840, height: H + 420 });
+  const revealRect = el('rect', { x: -420, y: -420, width: W + 840, height: H + 420, fill: '#fff' });
   const revealCircle = el('circle', { cx: W / 2, cy: H * .48, r: 0, fill: '#fff', display: 'none' });
   revealMask.append(revealRect, revealCircle);
 
@@ -484,6 +514,11 @@ function appendEffectDefinitions(defs, W, H) {
     duotoneFilter,
     dissolveFilter,
     auraFilter,
+    ...flameOuter.map(({ filter }) => filter),
+    ...flameInner.map(({ filter }) => filter),
+    echo14.filter,
+    echo30.filter,
+    echo48.filter,
     dropShadowFilter,
     aurora,
     scanlines,
@@ -504,6 +539,10 @@ function appendEffectDefinitions(defs, W, H) {
     wobbleFullNoise, wobbleFullDisplacement, wobbleEdgeNoise, wobbleEdgeDisplacement, wobbleEdgeErode,
     hairStars, hairStripes, hairHologram, shineGradient, halftoneMask, halftonePattern, duotoneFuncs, textPattern, textPatternLine1, textPatternLine2,
     glowDilate, glowBlur, glowFlood, revealRect, revealCircle, dissolveRed, rimPoint, rimDirectionOffset,
+    flameOuterNoiseOffsets: flameOuter.map(({ noiseOffset }) => noiseOffset),
+    flameInnerNoiseOffsets: flameInner.map(({ noiseOffset }) => noiseOffset),
+    echo14Dilate: echo14.dilate, echo14Inner: echo14.inner, echo30Dilate: echo30.dilate, echo30Inner: echo30.inner, echo48Dilate: echo48.dilate, echo48Inner: echo48.inner,
+    echo14Flood: echo14.flood, echo30Flood: echo30.flood, echo48Flood: echo48.flood,
   };
 }
 
@@ -817,8 +856,13 @@ function build({ W, H, paths }) {
 
   const backgroundEffects = el('g', { id: 'effectBackgroundWrap' });
   const auraUse = el('use', { href: '#avatarScene', filter: 'url(#fxAura)', opacity: '.48', display: 'none' });
+  const flameOuterUses = [0, 1, 2].map((index) => el('use', { href: '#avatarScene', filter: `url(#fxAuraFlameOuter${index})`, opacity: '1', display: 'none' }));
+  const flameInnerUses = [0, 1, 2].map((index) => el('use', { href: '#avatarScene', filter: `url(#fxAuraFlameInner${index})`, opacity: '1', display: 'none' }));
+  const voiceEcho14 = el('use', { href: '#avatarScene', filter: 'url(#fxVoiceEcho14)', opacity: '0', display: 'none' });
+  const voiceEcho30 = el('use', { href: '#avatarScene', filter: 'url(#fxVoiceEcho30)', opacity: '0', display: 'none' });
+  const voiceEcho48 = el('use', { href: '#avatarScene', filter: 'url(#fxVoiceEcho48)', opacity: '0', display: 'none' });
   const dropShadow = el('use', { href: '#avatarScene', filter: 'url(#fxDropShadow)', display: 'none' });
-  backgroundEffects.append(dropShadow, auraUse);
+  backgroundEffects.append(voiceEcho48, voiceEcho30, voiceEcho14, dropShadow, ...flameOuterUses, ...flameInnerUses, auraUse);
 
   const renderedEffects = el('g', { class: 'effect-rendered' });
   const glitchCyan = el('use', { href: '#avatarScene', class: 'effect-glitch effect-glitch-cyan', filter: 'url(#fxCyan)' });
@@ -928,6 +972,11 @@ function build({ W, H, paths }) {
       audioGlowWrap,
       wobbleWrap,
       auraUse,
+      flameOuterUses,
+      flameInnerUses,
+      voiceEcho14,
+      voiceEcho30,
+      voiceEcho48,
       dropShadow,
       renderedEffects,
       patternRect,
@@ -1054,7 +1103,7 @@ function createEffectController(svg, effects) {
 
   let config = {
     visualMode: 'normal', colorMood: 'neutral', audioGlow: false, glitch: false,
-    outline: 'none', rimLight: false, aura: false, dropShadow: false,
+    outline: 'none', rimLight: false, aura: 'none', voiceEcho: false, dropShadow: false,
     distortion: 'none', pattern: 'none', reveal: 'none', effectIntensity: 1, emotionSync: true,
     hairHueShift: 0, emotionParticles: false, backdrop: 'none', wobble: 'none', textPattern: false,
   };
@@ -1075,6 +1124,9 @@ function createEffectController(svg, effects) {
   let debugParticlesStarted = false;
   let debugTextPatternStarted = false;
   let textPatternFrameId = 0;
+  let flameFrameId = 0;
+  let echoFrameId = 0;
+  let echoLevel = 0;
   let currentPatternText = DEFAULT_PATTERN_TEXT;
 
   const clamp = (value, min, max) => Math.min(Math.max(Number(value) || 0, min), max);
@@ -1150,6 +1202,58 @@ function createEffectController(svg, effects) {
   const stopTextPatternLoop = () => {
     cancelAnimationFrame(textPatternFrameId);
     textPatternFrameId = 0;
+  };
+
+  const stopFlameLoop = () => {
+    cancelAnimationFrame(flameFrameId);
+    flameFrameId = 0;
+  };
+
+  const updateFlameLoop = (mode) => {
+    stopFlameLoop();
+    const enabled = mode === 'flame' || params.get('aura') === 'flame';
+    effects.flameOuterUses.forEach((node) => node.setAttribute('display', enabled ? 'inline' : 'none'));
+    effects.flameInnerUses.forEach((node) => node.setAttribute('display', enabled ? 'inline' : 'none'));
+    if (!enabled) return;
+    const fixed = params.has('t');
+    const frame = (now) => {
+      const drift = fixed ? 0 : (now / 42) % 24;
+      effects.flameOuterNoiseOffsets.forEach((node, index) => node.setAttribute('dy', String(-drift - index * 4)));
+      effects.flameInnerNoiseOffsets.forEach((node, index) => node.setAttribute('dy', String(-drift - index * 4 - 8)));
+      if (!fixed) flameFrameId = requestAnimationFrame(frame);
+    };
+    frame(params.has('t') ? state.fixedT * 1000 : performance.now());
+  };
+
+  const updateVoiceEcho = (mood) => {
+    const enabled = Boolean(config.voiceEcho) || params.has('echo');
+    const tick = () => {
+      const target = enabled ? clamp(params.has('echo') ? params.get('echo') : (speaking ? audioLevel : 0), 0, 1) : 0;
+      echoLevel += (target - echoLevel) * .2;
+      const visible = echoLevel > .012;
+      [effects.voiceEcho14, effects.voiceEcho30, effects.voiceEcho48].forEach((node) => node.setAttribute('display', visible ? 'inline' : 'none'));
+      effects.voiceEcho14.setAttribute('opacity', String(echoLevel * .85));
+      effects.voiceEcho30.setAttribute('opacity', String(echoLevel * .55));
+      effects.voiceEcho48.setAttribute('opacity', String(echoLevel * .3));
+      const echoScale = .4 + echoLevel;
+      effects.echo14Dilate.setAttribute('radius', String(20 * echoScale));
+      effects.echo14Inner.setAttribute('radius', String(Math.max(1, 20 * echoScale - 16)));
+      effects.echo30Dilate.setAttribute('radius', String(48 * echoScale));
+      effects.echo30Inner.setAttribute('radius', String(Math.max(1, 48 * echoScale - 16)));
+      effects.echo48Dilate.setAttribute('radius', String(80 * echoScale));
+      effects.echo48Inner.setAttribute('radius', String(Math.max(1, 80 * echoScale - 16)));
+      const colors = {
+        neutral: ['#ffd4df', '#ff9ab5', '#ff6f95'],
+        happy: ['#ffe0b0', '#ffb06b', '#ff8a3d'],
+        calm: ['#d7faff', '#8feeff', '#5ed8ff'],
+        dramatic: ['#ffd0d9', '#ff829b', '#ff536f'],
+        dreamy: ['#efdfff', '#d0a3ff', '#aa79f0'],
+      };
+      [effects.echo14Flood, effects.echo30Flood, effects.echo48Flood].forEach((node, index) => node.setAttribute('flood-color', (colors[mood] ?? colors.neutral)[index]));
+      if (Math.abs(target - echoLevel) > .01) echoFrameId = requestAnimationFrame(tick);
+      else echoFrameId = 0;
+    };
+    if (!echoFrameId) echoFrameId = requestAnimationFrame(tick);
   };
 
   const setPatternText = (value = '') => {
@@ -1306,7 +1410,8 @@ function createEffectController(svg, effects) {
     const visualMode = visualModes.includes(visualParam || config.visualMode) ? (visualParam || config.visualMode) : 'normal';
     const outline = params.get('outline') === 'sticker' ? 'sticker' : config.outline;
     const rimLight = params.has('rim') ? params.get('rim') !== '0' : Boolean(config.rimLight);
-    const aura = params.has('aura') ? params.get('aura') !== '0' : Boolean(config.aura);
+    const auraParam = params.get('aura');
+    const aura = auraParam === 'flame' ? 'flame' : auraParam && auraParam !== '0' ? 'glow' : (config.aura === true ? 'glow' : config.aura);
     const dropShadow = params.has('shadow') ? params.get('shadow') !== '0' : Boolean(config.dropShadow);
     const expressionEmotion = config.emotionSync || params.has('emotion') ? emotion : 'neutral';
     effects.expression?.setEmotion(expressionEmotion);
@@ -1379,7 +1484,9 @@ function createEffectController(svg, effects) {
       if (typeof effects.turbulenceAnimation.beginElement === 'function') effects.turbulenceAnimation.beginElement();
     }
 
-    effects.auraUse.setAttribute('display', aura ? 'inline' : 'none');
+    effects.auraUse.setAttribute('display', aura === 'glow' ? 'inline' : 'none');
+    svg.dataset.aura = aura;
+    updateFlameLoop(aura);
     effects.dropShadow.setAttribute('display', dropShadow ? 'inline' : 'none');
 
     if (pattern === 'none') {
@@ -1394,6 +1501,7 @@ function createEffectController(svg, effects) {
     const glowColors = { neutral: '#ff5f86', happy: '#ff8a3d', calm: '#38d8ff', dramatic: '#ff315f', dreamy: '#aa6cff' };
     effects.glowFlood.setAttribute('flood-color', glowColors[mood] ?? glowColors.neutral);
     updateAudioGlow();
+    updateVoiceEcho(mood);
     updateWobbleLoop(wobble, config.effectIntensity);
   };
 
@@ -1479,6 +1587,7 @@ function createEffectController(svg, effects) {
       audioLevel = clamp(value, 0, 1);
       speaking = Boolean(isSpeaking);
       updateAudioGlow();
+      updateVoiceEcho(config.emotionSync ? EMOTION_MOODS[emotion] : config.colorMood);
     },
     replayReveal,
     destroy() {
@@ -1487,6 +1596,9 @@ function createEffectController(svg, effects) {
       stopWobbleLoop();
       stopHairPatternLoop();
       stopTextPatternLoop();
+      stopFlameLoop();
+      cancelAnimationFrame(echoFrameId);
+      echoFrameId = 0;
       cancelAnimationFrame(shineFrameId);
       shineRunId += 1;
       effects.particleGroup.replaceChildren();

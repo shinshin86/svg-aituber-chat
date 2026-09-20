@@ -81,6 +81,7 @@ export type AvatarReveal = 'none' | 'wipe' | 'iris' | 'draw' | 'dissolve';
 export type AvatarBackdrop = 'none' | 'focusLines' | 'halftone';
 export type AvatarWobble = 'none' | 'full' | 'edge';
 export type AvatarHairPattern = 'none' | 'stars' | 'stripes' | 'hologram';
+export type AvatarAura = 'none' | 'glow' | 'flame';
 
 export interface AvatarSettings {
   background: 'white' | 'dark' | 'green';
@@ -99,7 +100,8 @@ export interface AvatarSettings {
   audioGlow: boolean;
   outline: 'none' | 'sticker';
   rimLight: boolean;
-  aura: boolean;
+  aura: AvatarAura;
+  voiceEcho: boolean;
   dropShadow: boolean;
   glitch: boolean;
   distortion: AvatarDistortion;

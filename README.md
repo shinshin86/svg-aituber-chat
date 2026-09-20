@@ -56,7 +56,9 @@ Add parameters to the URL to freeze an expression or effect without configuring 
 | `?mouth=0.7&mouthw=1.25` | Freeze the mouth opening (0 to 1) and width (0.75 to 1.25). |
 | `?gesture=nod&gt=0.35` | Hold a gesture (`nod`, `tilt`, `jump`, `laugh`) at a progress from 0 to 1. |
 | `?thinking=1` | Show the thinking gaze. |
-| `?outline=sticker`, `?rim=1`, `?aura=1`, `?shadow=1` | Show the sticker outline, rim light, aura, or drop shadow. |
+| `?outline=sticker`, `?rim=1`, `?shadow=1` | Show the sticker outline, rim light, or drop shadow. |
+| `?aura=1`, `?aura=flame` | Show the glow aura or the flame aura behind the avatar. |
+| `?echo=0.6` | Show the outline rings that follow the voice level, at a fixed level from 0 to 1. |
 | `?visual=poster` | Use the poster look. |
 | `?visual=halftone` | Add comic-style dots to darker regions. |
 | `?visual=duotone&mood=dramatic` | Map brightness to a two- or three-color palette; the palette follows the color mood (`mood`). |
