@@ -111,6 +111,7 @@ export interface AvatarSettings {
   backdrop: AvatarBackdrop;
   wobble: AvatarWobble;
   hairPattern: AvatarHairPattern;
+  textPattern: boolean;
 }
 
 export interface AppSettings {

@@ -332,6 +332,10 @@ export function SettingsPanel({
             <small>キャラクターと背景の色調を同時に切り替えます。</small>
           </label>
           <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.textPattern} onChange={(event) => onUpdateAvatar({ textPattern: event.target.checked })} />
+            <span>コメント文字パターン</span>
+          </label>
+          <label className="check-field">
             <input
               type="checkbox"
               checked={settings.avatar.audioGlow}

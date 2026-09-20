@@ -1,4 +1,5 @@
 import { rotateHue } from '../lib/avatarColor';
+import { DEFAULT_PATTERN_TEXT, formatPatternText } from '../lib/patternText';
 
 /*
  * SVG Avatar Demo
@@ -30,6 +31,7 @@ import { rotateHue } from '../lib/avatarColor';
  *   ?wobble=full|edge&wseed=3  Show hand-drawn wobble with an optional fixed seed
  *   ?hairfx=stars|stripes|hologram  Show a hair pattern
  *   ?shine=0.5  Hold the diagonal shine at a progress from 0 to 1
+ *   ?textfx=1&ptext=こんにちは  Show a flowing text pattern
  *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
  *   ?comment=cute  Trigger one comment keyword reaction after startup
  *   ?amp=0        Override the motion amplitude
@@ -425,6 +427,12 @@ function appendEffectDefinitions(defs, W, H) {
     el('circle', { cx: 24, cy: 24, r: 3, fill: '#4ecfff' }),
     el('animateTransform', { attributeName: 'patternTransform', type: 'translate', from: '0 0', to: '32 32', dur: '4.5s', repeatCount: 'indefinite' }),
   );
+  const textPattern = el('pattern', { id: 'fxTextPattern', width: 744, height: 150, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(-20)' });
+  const textPatternLine1 = el('text', { x: 0, y: 64, fill: '#fff', 'font-size': 64, 'font-weight': 700, 'font-family': 'sans-serif' });
+  const textPatternLine2 = el('text', { x: 372, y: 140, fill: '#fff', 'font-size': 64, 'font-weight': 700, 'font-family': 'sans-serif' });
+  textPatternLine1.textContent = DEFAULT_PATTERN_TEXT;
+  textPatternLine2.textContent = DEFAULT_PATTERN_TEXT;
+  textPattern.append(textPatternLine1, textPatternLine2);
 
   const hairStars = el('pattern', { id: 'fxHairStars', width: 120, height: 120, patternUnits: 'userSpaceOnUse' });
   hairStars.append(
@@ -480,6 +488,7 @@ function appendEffectDefinitions(defs, W, H) {
     aurora,
     scanlines,
     dots,
+    textPattern,
     hairStars,
     hairStripes,
     hairHologram,
@@ -493,7 +502,7 @@ function appendEffectDefinitions(defs, W, H) {
   return {
     W, H, moodMatrix, turbulence, turbulenceAnimation, displacement,
     wobbleFullNoise, wobbleFullDisplacement, wobbleEdgeNoise, wobbleEdgeDisplacement, wobbleEdgeErode,
-    hairStars, hairStripes, hairHologram, shineGradient, halftoneMask, halftonePattern, duotoneFuncs,
+    hairStars, hairStripes, hairHologram, shineGradient, halftoneMask, halftonePattern, duotoneFuncs, textPattern, textPatternLine1, textPatternLine2,
     glowDilate, glowBlur, glowFlood, revealRect, revealCircle, dissolveRed, rimPoint, rimDirectionOffset,
   };
 }
@@ -839,10 +848,13 @@ function build({ W, H, paths }) {
     node.setAttribute('stroke', 'none');
     halftoneOverlay.append(node);
   });
+  const textPatternWrap = el('g', { class: 'effect-text-pattern', mask: 'url(#fxSilhouetteMask)', display: 'none', opacity: '.34', 'pointer-events': 'none' });
+  const textPatternRect = el('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#fxTextPattern)' });
+  textPatternWrap.append(textPatternRect);
   const shineWrap = el('g', { id: 'effectShineWrap', display: params.has('shine') ? 'inline' : 'none', mask: 'url(#fxSilhouetteMask)', 'pointer-events': 'none' });
   const shineBand = el('rect', { x: -150, y: -H * .2, width: 300, height: H * 1.4, fill: 'url(#fxShine)', transform: `rotate(45 ${W / 2} ${H / 2})` });
   shineWrap.append(shineBand);
-  renderedEffects.append(glitchCyan, glitchPink, wobbleWrap, patternRect, halftoneOverlay);
+  renderedEffects.append(glitchCyan, glitchPink, wobbleWrap, patternRect, halftoneOverlay, textPatternWrap);
 
   const backdropPattern = el('pattern', { id: 'fxHalftone', width: 32, height: 32, patternUnits: 'userSpaceOnUse' });
   backdropPattern.append(el('circle', { cx: 10, cy: 10, r: 10, fill: '#ff6b9d', opacity: '.35' }));
@@ -922,6 +934,10 @@ function build({ W, H, paths }) {
       halftoneRect,
       halftoneWrap,
       halftoneOverlay,
+      textPatternWrap,
+      textPattern: effectRefs.textPattern,
+      textPatternLine1: effectRefs.textPatternLine1,
+      textPatternLine2: effectRefs.textPatternLine2,
       duotoneFuncs: effectRefs.duotoneFuncs,
       hairPatternOverlay,
       hairPatternOverlayRect,
@@ -1033,14 +1049,14 @@ function createExpressionController(expressionRefs, initialEmotion = 'neutral') 
 
 function createEffectController(svg, effects) {
   if (!effects) {
-    return { setEffects() {}, setEmotion() {}, setAudioLevel() {}, playShine() {}, replayReveal() {}, destroy() {} };
+    return { setEffects() {}, setEmotion() {}, setAudioLevel() {}, setPatternText() {}, playShine() {}, replayReveal() {}, destroy() {} };
   }
 
   let config = {
     visualMode: 'normal', colorMood: 'neutral', audioGlow: false, glitch: false,
     outline: 'none', rimLight: false, aura: false, dropShadow: false,
     distortion: 'none', pattern: 'none', reveal: 'none', effectIntensity: 1, emotionSync: true,
-    hairHueShift: 0, emotionParticles: false, backdrop: 'none', wobble: 'none',
+    hairHueShift: 0, emotionParticles: false, backdrop: 'none', wobble: 'none', textPattern: false,
   };
   let emotion = state.emotion;
   let audioLevel = 0;
@@ -1057,6 +1073,9 @@ function createEffectController(svg, effects) {
   let shineRunId = 0;
   let debugShineStarted = false;
   let debugParticlesStarted = false;
+  let debugTextPatternStarted = false;
+  let textPatternFrameId = 0;
+  let currentPatternText = DEFAULT_PATTERN_TEXT;
 
   const clamp = (value, min, max) => Math.min(Math.max(Number(value) || 0, min), max);
   const resetReveal = () => {
@@ -1126,6 +1145,36 @@ function createEffectController(svg, effects) {
   const stopHairPatternLoop = () => {
     cancelAnimationFrame(hairPatternFrameId);
     hairPatternFrameId = 0;
+  };
+
+  const stopTextPatternLoop = () => {
+    cancelAnimationFrame(textPatternFrameId);
+    textPatternFrameId = 0;
+  };
+
+  const setPatternText = (value = '') => {
+    currentPatternText = formatPatternText(value);
+    effects.textPatternLine1.textContent = currentPatternText;
+    effects.textPatternLine2.textContent = currentPatternText;
+    const width = Math.max(520, Array.from(currentPatternText).length * 52 + 120);
+    effects.textPattern.setAttribute('width', String(width));
+    effects.textPatternLine2.setAttribute('x', String(width / 2));
+    const enabled = Boolean(config.textPattern) || params.has('textfx');
+    effects.textPatternWrap.setAttribute('display', enabled ? 'inline' : 'none');
+  };
+
+  const updateTextPattern = () => {
+    stopTextPatternLoop();
+    const enabled = Boolean(config.textPattern) || params.has('textfx');
+    effects.textPatternWrap.setAttribute('display', enabled ? 'inline' : 'none');
+    if (!enabled) return;
+    const fixed = params.has('t');
+    const frame = (now) => {
+      const offset = fixed ? 0 : -((now / 70) % 900);
+      effects.textPattern.setAttribute('patternTransform', `translate(${offset} 0) rotate(-20)`);
+      if (!fixed) textPatternFrameId = requestAnimationFrame(frame);
+    };
+    frame(params.has('t') ? state.fixedT * 1000 : performance.now());
   };
 
   const updateHairPattern = (pattern) => {
@@ -1282,6 +1331,11 @@ function createEffectController(svg, effects) {
       playParticles(params.get('particles'));
     }
     updateHairPattern(hairfx);
+    if (params.has('textfx') && !debugTextPatternStarted) {
+      debugTextPatternStarted = true;
+      setPatternText(params.get('ptext') || DEFAULT_PATTERN_TEXT);
+    }
+    updateTextPattern();
     if (params.has('shine') && !debugShineStarted) {
       debugShineStarted = true;
       playShine();
@@ -1418,6 +1472,7 @@ function createEffectController(svg, effects) {
   return {
     setEffects,
     setEmotion,
+    setPatternText,
     playParticles,
     playShine,
     setAudioLevel(value, isSpeaking) {
@@ -1431,6 +1486,7 @@ function createEffectController(svg, effects) {
       cancelAnimationFrame(particleFrameId);
       stopWobbleLoop();
       stopHairPatternLoop();
+      stopTextPatternLoop();
       cancelAnimationFrame(shineFrameId);
       shineRunId += 1;
       effects.particleGroup.replaceChildren();
@@ -1691,6 +1747,9 @@ export async function createSvgAvatar(container, srcUrl) {
     },
     playShine() {
       effectController.playShine();
+    },
+    setPatternText(text) {
+      effectController.setPatternText(text);
     },
     setThinking(value) {
       state.setThinking(value);

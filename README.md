@@ -68,6 +68,7 @@ Add parameters to the URL to freeze an expression or effect without configuring 
 | `?wobble=full&wseed=3` | Show a hand-drawn wobble on the whole avatar (`full`) or only its outline (`edge`); `wseed` fixes the noise seed. |
 | `?hairfx=stars` | Show a pattern inside the hair: `stars`, `stripes`, or `hologram` (the hologram angle follows the pointer). |
 | `?shine=0.5` | Hold the diagonal shine sweep at a progress from 0 to 1. |
+| `?textfx=1&ptext=hello` | Flow the given text diagonally inside the avatar silhouette. During a stream it switches to the selected comment (first 24 characters) for a few seconds. |
 | `?bg=dark` | Choose the background: `white`, `dark`, or `green`. |
 | `?t=1.5&mx=0&my=0` | Freeze the animation time and pointer position. |
 | `?blink=1`, `?debug=1`, `?flat=1` | Freeze mid-blink, show region boundaries, or render the original SVG without splitting it. |

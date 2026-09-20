@@ -13,6 +13,7 @@ interface AvatarController {
   setThinking: (value: boolean) => void;
   setOptions: (options: Record<string, number | boolean>) => void;
   setEffects: (settings: AvatarSettings) => void;
+  setPatternText: (text: string) => void;
   replayReveal: () => void;
   destroy: () => void;
 }
@@ -30,12 +31,14 @@ interface SvgAvatarProps {
   emotion: string;
   effectReplayToken: number;
   commentReaction: CommentReactionEvent | null;
+  patternText: { text: string; token: number } | null;
 }
 
-export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinking, emotion, effectReplayToken, commentReaction }: SvgAvatarProps) {
+export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinking, emotion, effectReplayToken, commentReaction, patternText }: SvgAvatarProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AvatarController | null>(null);
   const commentReactionTimerRef = useRef<number | null>(null);
+  const patternTextTimerRef = useRef<number | null>(null);
   const [controllerReady, setControllerReady] = useState(0);
   const latestSettingsRef = useRef(settings);
   const [loadError, setLoadError] = useState('');
@@ -80,6 +83,7 @@ export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinkin
       active = false;
       controller?.destroy();
       if (commentReactionTimerRef.current !== null) window.clearTimeout(commentReactionTimerRef.current);
+      if (patternTextTimerRef.current !== null) window.clearTimeout(patternTextTimerRef.current);
       if (controllerRef.current === controller) controllerRef.current = null;
     };
   }, []);
@@ -124,6 +128,18 @@ export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinkin
       }, 2500);
     }
   }, [commentReaction, controllerReady]);
+
+  useEffect(() => {
+    if (!patternText || !controllerReady) return;
+    const controller = controllerRef.current;
+    if (!controller) return;
+    if (patternTextTimerRef.current !== null) window.clearTimeout(patternTextTimerRef.current);
+    controller.setPatternText(patternText.text);
+    patternTextTimerRef.current = window.setTimeout(() => {
+      controllerRef.current?.setPatternText('');
+      patternTextTimerRef.current = null;
+    }, 6000);
+  }, [patternText, controllerReady]);
 
   useEffect(() => {
     controllerRef.current?.setThinking(thinking);

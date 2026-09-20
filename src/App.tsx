@@ -19,6 +19,10 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('chat');
   const [avatarEffectReplayToken, setAvatarEffectReplayToken] = useState(0);
   const [commentReaction, setCommentReaction] = useState<CommentReactionEvent | null>(null);
+  const [patternText, setPatternText] = useState<{ text: string; token: number } | null>(() => {
+    const debugComment = new URLSearchParams(window.location.search).get('comment');
+    return debugComment ? { text: debugComment, token: Date.now() } : null;
+  });
   const debugCommentTriggeredRef = useRef(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const settingsState = useSettings();
@@ -30,6 +34,7 @@ export default function App() {
   });
 
   const handleYouTubeCommentSelected = useCallback((comment: { userComment: string }) => {
+    setPatternText({ text: comment.userComment, token: Date.now() });
     if (
       settingsState.settings.stream.playAvatarEffectOnComment &&
       settingsState.settings.avatar.reveal !== 'none'
@@ -166,6 +171,7 @@ export default function App() {
           emotion={core.emotion}
           effectReplayToken={avatarEffectReplayToken}
           commentReaction={commentReaction}
+          patternText={patternText}
         />
 
         <div className="voice-meter" aria-label={`音声レベル ${Math.round(audio.mouthOpen * 100)}%`}>
