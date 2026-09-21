@@ -102,6 +102,7 @@ export interface AvatarSettings {
   rimLight: boolean;
   aura: AvatarAura;
   voiceEcho: boolean;
+  silhouetteCache: boolean;
   dropShadow: boolean;
   glitch: boolean;
   distortion: AvatarDistortion;

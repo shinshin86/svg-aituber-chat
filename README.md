@@ -58,6 +58,7 @@ Add parameters to the URL to freeze an expression or effect without configuring 
 | `?thinking=1` | Show the thinking gaze. |
 | `?outline=sticker`, `?rim=1`, `?shadow=1` | Show the sticker outline, rim light, or drop shadow. |
 | `?aura=1`, `?aura=flame` | Show the glow aura or the flame aura behind the avatar. |
+| `?silcache=0` | Turn off the silhouette cache and draw the shadow, aura, and voice rings from the full artwork again (slower; useful for comparison). |
 | `?echo=0.6` | Show the outline rings that follow the voice level, at a fixed level from 0 to 1. |
 | `?visual=poster` | Use the poster look. |
 | `?visual=halftone` | Add comic-style dots to darker regions. |

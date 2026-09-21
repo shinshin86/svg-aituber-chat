@@ -546,6 +546,58 @@ function appendEffectDefinitions(defs, W, H) {
   };
 }
 
+function silhouetteSvgDataUrl(paths, W, H, predicate) {
+  const source = el('svg', { viewBox: `0 0 ${W} ${H}`, xmlns: NS });
+  paths.filter(predicate).forEach((path) => {
+    const node = path.node.cloneNode(true);
+    node.setAttribute('fill', '#000');
+    node.setAttribute('fill-opacity', '1');
+    node.setAttribute('stroke', 'none');
+    node.removeAttribute('filter');
+    source.append(node);
+  });
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(source))}`;
+}
+
+function rasterizeSilhouette(dataUrl, W, H, scale) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(W * scale));
+        canvas.height = Math.max(1, Math.round(H * scale));
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('canvas 2D context unavailable');
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    image.onerror = () => reject(new Error('silhouette SVG image failed to load'));
+    image.src = dataUrl;
+  });
+}
+
+async function prepareSilhouetteCache(paths, W, H, images) {
+  const startedAt = performance.now();
+  const requestedScale = Number(params.get('silres'));
+  const scale = Number.isFinite(requestedScale) && requestedScale > 0 ? Math.min(requestedScale, 2) : .5;
+  try {
+    const body = await rasterizeSilhouette(silhouetteSvgDataUrl(paths, W, H, (path) => path.inBody), W, H, scale);
+    const head = await rasterizeSilhouette(silhouetteSvgDataUrl(paths, W, H, (path) => path.inHead), W, H, scale);
+    images.body.setAttribute('href', body);
+    images.head.setAttribute('href', head);
+    console.debug(`[svg-aituber] silhouette cache ready in ${(performance.now() - startedAt).toFixed(1)}ms (${scale}x)`);
+    return true;
+  } catch (error) {
+    console.warn('[svg-aituber] silhouette cache unavailable; using SVG fallback', error);
+    return false;
+  }
+}
+
 function build({ W, H, paths }) {
   const counts = classify(paths);
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, xmlns: NS });
@@ -562,6 +614,15 @@ function build({ W, H, paths }) {
     return m;
   };
   defs.append(grad('gHead', '#fff', '#000'), grad('gBody', '#000', '#fff'), mask('mHead', 'gHead'), mask('mBody', 'gBody'));
+  const silhouetteGroup = el('g', { id: 'avatarSilhouette' });
+  const silhouetteBody = el('g', { class: 'sil-body' });
+  const silhouetteHead = el('g', { class: 'sil-head' });
+  const silhouetteBodyImage = el('image', { x: 0, y: 0, width: W, height: H, preserveAspectRatio: 'none' });
+  const silhouetteHeadImage = el('image', { x: 0, y: 0, width: W, height: H, preserveAspectRatio: 'none' });
+  silhouetteBody.append(silhouetteBodyImage);
+  silhouetteHead.append(silhouetteHeadImage);
+  silhouetteGroup.append(silhouetteBody, silhouetteHead);
+  defs.append(silhouetteGroup);
   const hairBaseClip = el('clipPath', { id: 'cHairBase', clipPathUnits: 'userSpaceOnUse' });
   hairBaseClip.append(
     el('rect', { x: 500, y: 0, width: 1520, height: 620 }),
@@ -855,13 +916,14 @@ function build({ W, H, paths }) {
   wobbleWrap.append(audioGlowWrap);
 
   const backgroundEffects = el('g', { id: 'effectBackgroundWrap' });
-  const auraUse = el('use', { href: '#avatarScene', filter: 'url(#fxAura)', opacity: '.48', display: 'none' });
-  const flameOuterUses = [0, 1, 2].map((index) => el('use', { href: '#avatarScene', filter: `url(#fxAuraFlameOuter${index})`, opacity: '1', display: 'none' }));
-  const flameInnerUses = [0, 1, 2].map((index) => el('use', { href: '#avatarScene', filter: `url(#fxAuraFlameInner${index})`, opacity: '1', display: 'none' }));
-  const voiceEcho14 = el('use', { href: '#avatarScene', filter: 'url(#fxVoiceEcho14)', opacity: '0', display: 'none' });
-  const voiceEcho30 = el('use', { href: '#avatarScene', filter: 'url(#fxVoiceEcho30)', opacity: '0', display: 'none' });
-  const voiceEcho48 = el('use', { href: '#avatarScene', filter: 'url(#fxVoiceEcho48)', opacity: '0', display: 'none' });
-  const dropShadow = el('use', { href: '#avatarScene', filter: 'url(#fxDropShadow)', display: 'none' });
+  const silhouetteUse = () => ({ href: '#avatarSilhouette' });
+  const auraUse = el('use', { ...silhouetteUse(), filter: 'url(#fxAura)', opacity: '.48', display: 'none' });
+  const flameOuterUses = [0, 1, 2].map((index) => el('use', { ...silhouetteUse(), filter: `url(#fxAuraFlameOuter${index})`, opacity: '1', display: 'none' }));
+  const flameInnerUses = [0, 1, 2].map((index) => el('use', { ...silhouetteUse(), filter: `url(#fxAuraFlameInner${index})`, opacity: '1', display: 'none' }));
+  const voiceEcho14 = el('use', { ...silhouetteUse(), filter: 'url(#fxVoiceEcho14)', opacity: '0', display: 'none' });
+  const voiceEcho30 = el('use', { ...silhouetteUse(), filter: 'url(#fxVoiceEcho30)', opacity: '0', display: 'none' });
+  const voiceEcho48 = el('use', { ...silhouetteUse(), filter: 'url(#fxVoiceEcho48)', opacity: '0', display: 'none' });
+  const dropShadow = el('use', { ...silhouetteUse(), filter: 'url(#fxDropShadow)', display: 'none' });
   backgroundEffects.append(voiceEcho48, voiceEcho30, voiceEcho14, dropShadow, ...flameOuterUses, ...flameInnerUses, auraUse);
 
   const renderedEffects = el('g', { class: 'effect-rendered' });
@@ -964,6 +1026,8 @@ function build({ W, H, paths }) {
       ...effectRefs,
       scene,
       gestureWrap,
+      silhouette: { group: silhouetteGroup, body: silhouetteBody, head: silhouetteHead, images: { body: silhouetteBodyImage, head: silhouetteHeadImage } },
+      silhouetteReady: false,
       moodWrap,
       styleWrap,
       outlineWrap,
@@ -1103,7 +1167,7 @@ function createEffectController(svg, effects) {
 
   let config = {
     visualMode: 'normal', colorMood: 'neutral', audioGlow: false, glitch: false,
-    outline: 'none', rimLight: false, aura: 'none', voiceEcho: false, dropShadow: false,
+    outline: 'none', rimLight: false, aura: 'none', voiceEcho: false, silhouetteCache: true, dropShadow: false,
     distortion: 'none', pattern: 'none', reveal: 'none', effectIntensity: 1, emotionSync: true,
     hairHueShift: 0, emotionParticles: false, backdrop: 'none', wobble: 'none', textPattern: false,
   };
@@ -1128,6 +1192,14 @@ function createEffectController(svg, effects) {
   let echoFrameId = 0;
   let echoLevel = 0;
   let currentPatternText = DEFAULT_PATTERN_TEXT;
+
+  const silhouetteSources = [effects.dropShadow, effects.auraUse, ...effects.flameOuterUses, ...effects.flameInnerUses, effects.voiceEcho14, effects.voiceEcho30, effects.voiceEcho48];
+  const applySilhouetteSource = () => {
+    const requested = params.get('silcache');
+    const enabled = requested === '0' ? false : requested === '1' ? true : Boolean(config.silhouetteCache);
+    const href = enabled && effects.silhouetteReady ? '#avatarSilhouette' : '#avatarScene';
+    silhouetteSources.forEach((node) => node.setAttribute('href', href));
+  };
 
   const clamp = (value, min, max) => Math.min(Math.max(Number(value) || 0, min), max);
   const resetReveal = () => {
@@ -1405,6 +1477,7 @@ function createEffectController(svg, effects) {
 
   const setEffects = (next) => {
     config = { ...config, ...next, effectIntensity: clamp(next.effectIntensity ?? config.effectIntensity, .25, 2) };
+    applySilhouetteSource();
     const visualParam = params.get('visual');
     const visualModes = ['normal', 'monochrome', 'lineArt', 'neon', 'poster', 'halftone', 'duotone'];
     const visualMode = visualModes.includes(visualParam || config.visualMode) ? (visualParam || config.visualMode) : 'normal';
@@ -1579,6 +1652,10 @@ function createEffectController(svg, effects) {
 
   return {
     setEffects,
+    setSilhouetteCacheReady(value) {
+      effects.silhouetteReady = Boolean(value);
+      applySilhouetteSource();
+    },
     setEmotion,
     setPatternText,
     playParticles,
@@ -1619,7 +1696,7 @@ function centerOf(list, fallback) {
 function setT(list, value) { for (const g of list) g.setAttribute('transform', value); }
 function setVis(list, visible) { for (const g of list) g.style.visibility = visible ? 'visible' : 'hidden'; }
 
-function startAnimation(parts, paths, expressionController, gestureWrap, rimPoint, rimDirectionOffset, W, H) {
+function startAnimation(parts, paths, expressionController, gestureWrap, rimPoint, rimDirectionOffset, W, H, silhouette) {
   const M = CFG.motion;
   const of = (name) => paths.filter(p => p.inHead && p.part === name);
   const eyeLc = centerOf(of('eyeL'), { x: 1115, y: 565, top: 480, bottom: 650 });
@@ -1698,7 +1775,9 @@ function startAnimation(parts, paths, expressionController, gestureWrap, rimPoin
     } else {
       saccadeX = 0; saccadeY = 0;
     }
-    if (gestureWrap) setT([gestureWrap], `translate(0 ${pose.sceneY}) ${scaleAbout(W / 2, H, pose.sceneScaleX, pose.sceneScaleY)}`);
+    const gestureTransform = `translate(0 ${pose.sceneY}) ${scaleAbout(W / 2, H, pose.sceneScaleX, pose.sceneScaleY)}`;
+    if (gestureWrap) setT([gestureWrap], gestureTransform);
+    if (silhouette) setT([silhouette.group], gestureTransform);
     if (rimPoint && (state.mouse.x !== lastRimMouseX || state.mouse.y !== lastRimMouseY)) {
       rimPoint.setAttribute('x', String(W * (.5 + state.mouse.x * .35)));
       rimPoint.setAttribute('y', String(H * (.34 + state.mouse.y * .24)));
@@ -1721,7 +1800,12 @@ function startAnimation(parts, paths, expressionController, gestureWrap, rimPoin
       springVelocity = 0;
     }
     previousHeadDeg = headDeg;
-    setT(parts.head, `translate(0 ${breath * 0.5 + pose.headY}) ${scaleAbout(CFG.pivot.x, CFG.pivot.y, 1, pose.headScaleY)} rotate(${headDeg + pose.headRotate} ${CFG.pivot.x} ${CFG.pivot.y})`);
+    const headTransform = `translate(0 ${breath * 0.5 + pose.headY}) ${scaleAbout(CFG.pivot.x, CFG.pivot.y, 1, pose.headScaleY)} rotate(${headDeg + pose.headRotate} ${CFG.pivot.x} ${CFG.pivot.y})`;
+    setT(parts.head, headTransform);
+    if (silhouette) {
+      setT([silhouette.body], `translate(0 ${breath})`);
+      setT([silhouette.head], headTransform);
+    }
 
     // Hair follows the head with a slight delayed counter-swing.
     const hairDeg = (F.hairSway ? Math.sin(t * 2 * Math.PI / M.hairPeriod) * M.hairDeg * A : 0) - headDeg * 0.35 + springAngle;
@@ -1808,9 +1892,12 @@ export async function createSvgAvatar(container, srcUrl) {
   const { svg, parts, counts, effects } = build(data);
   container.replaceChildren(svg);
   svg.classList.toggle('debug', state.flags.debug);
-  const stopAnimation = parts ? startAnimation(parts, data.paths, effects?.expression, effects?.gestureWrap, effects?.rimPoint, effects?.rimDirectionOffset, data.W, data.H) : () => {};
+  const stopAnimation = parts ? startAnimation(parts, data.paths, effects?.expression, effects?.gestureWrap, effects?.rimPoint, effects?.rimDirectionOffset, data.W, data.H, effects?.silhouette) : () => {};
   const effectController = createEffectController(svg, effects);
   effectController.setEmotion(state.emotion);
+  if (parts && params.get('silcache') !== '0') {
+    prepareSilhouetteCache(data.paths, data.W, data.H, effects.silhouette.images).then((ready) => effectController.setSilhouetteCacheReady(ready));
+  }
   if (params.has('reveal')) effectController.replayReveal();
 
   const handleMouseMove = (event) => {

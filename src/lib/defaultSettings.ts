@@ -77,6 +77,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     rimLight: false,
     aura: 'none',
     voiceEcho: false,
+    silhouetteCache: true,
     dropShadow: false,
     glitch: false,
     distortion: 'none',

@@ -367,6 +367,10 @@ export function SettingsPanel({
             <span>音量連動シルエットエコー</span>
           </label>
           <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.silhouetteCache} onChange={(event) => onUpdateAvatar({ silhouetteCache: event.target.checked })} />
+            <span>背面演出を軽量化（シルエットキャッシュ）</span>
+          </label>
+          <label className="check-field">
             <input type="checkbox" checked={settings.avatar.dropShadow} onChange={(event) => onUpdateAvatar({ dropShadow: event.target.checked })} />
             <span>シルエットの影</span>
           </label>

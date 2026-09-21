@@ -14,6 +14,7 @@ describe('avatar advanced effect settings', () => {
     expect(settings.avatar.rimLight).toBe(false);
     expect(settings.avatar.aura).toBe('none');
     expect(settings.avatar.voiceEcho).toBe(false);
+    expect(settings.avatar.silhouetteCache).toBe(true);
     expect(settings.avatar.dropShadow).toBe(false);
     expect(settings.avatar.visualMode).toBe('normal');
     expect(settings.avatar.reveal).toBe('none');
