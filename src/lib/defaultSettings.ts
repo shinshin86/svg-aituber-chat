@@ -51,7 +51,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     provider: 'openai',
     model: 'gpt-4.1-nano',
     endpoint: 'http://localhost:11434/v1/chat/completions',
-    systemPrompt: 'あなたは明るく親しみやすいAIキャラクターです。返答は日本語で短く自然に話してください。',
+    systemPrompt: 'あなたは明るく親しみやすいAIキャラクターです。返答は日本語で短く自然に話してください。返答の先頭に [happy] [sad] [angry] [surprised] [neutral] のいずれか1つを付けてください。',
     apiKeys: {},
   },
   tts: {
@@ -66,16 +66,30 @@ export const DEFAULT_SETTINGS: AppSettings = {
     blink: true,
     mouseFollow: true,
     debug: false,
+    emotionSync: true,
+    autoGesture: true,
     amplitude: 1,
     speed: 1,
     visualMode: 'normal',
     colorMood: 'neutral',
     audioGlow: false,
+    outline: 'none',
+    rimLight: false,
+    aura: 'none',
+    voiceEcho: false,
+    silhouetteCache: true,
+    dropShadow: false,
     glitch: false,
     distortion: 'none',
     pattern: 'none',
     reveal: 'none',
     effectIntensity: 1,
+    hairHueShift: 0,
+    emotionParticles: false,
+    backdrop: 'none',
+    wobble: 'none',
+    hairPattern: 'none',
+    textPattern: false,
   },
   stream: {
     youtubeApiKey: '',
@@ -83,6 +97,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     youtubeEnabled: false,
     youtubeCommentIntervalMs: 20_000,
     playAvatarEffectOnComment: true,
+    commentReactions: true,
   },
 };
 
@@ -97,6 +112,16 @@ export function mergeStoredSettings(value: unknown): AppSettings {
     ]),
   ) as Record<TtsEngine, TtsProfile>;
 
+  const storedAura = (value as { avatar?: { aura?: unknown } }).avatar?.aura;
+  const aura = storedAura === true
+    ? 'glow'
+    : storedAura === false || storedAura === undefined
+      ? DEFAULT_SETTINGS.avatar.aura
+      : storedAura === 'glow' || storedAura === 'flame' || storedAura === 'none'
+        ? storedAura
+        : DEFAULT_SETTINGS.avatar.aura;
+  const migratedAvatar = { ...stored.avatar, aura };
+
   return {
     llm: {
       ...DEFAULT_SETTINGS.llm,
@@ -104,7 +129,7 @@ export function mergeStoredSettings(value: unknown): AppSettings {
       apiKeys: { ...DEFAULT_SETTINGS.llm.apiKeys, ...stored.llm?.apiKeys },
     },
     tts: { ...DEFAULT_SETTINGS.tts, ...stored.tts, profiles },
-    avatar: { ...DEFAULT_SETTINGS.avatar, ...stored.avatar },
+    avatar: { ...DEFAULT_SETTINGS.avatar, ...migratedAvatar },
     // Streaming must always be started by a user gesture so browser audio can
     // be unlocked before an automatic TTS response is played.
     stream: { ...DEFAULT_SETTINGS.stream, ...stored.stream, youtubeEnabled: false },

@@ -115,6 +115,9 @@ button { color: inherit; }
 .avatar-wrap { position: relative; z-index: 1; }
 .avatar-host { display: flex; align-items: center; justify-content: center; }
 .avatar-host svg { width: 100%; height: 100%; filter: drop-shadow(0 28px 30px rgba(27,33,50,.10)); }
+.stage:has(.avatar-host svg[data-aura="flame"]),
+.avatar-host:has(svg[data-aura="flame"]),
+.avatar-host svg[data-aura="flame"] { overflow: visible; }
 .background-dark .avatar-host svg { --avatar-line-ink: #ffe3ee; }
 .avatar-host svg[data-visual-mode="lineArt"] #avatarScene path {
   fill: rgba(255,255,255,.025) !important;

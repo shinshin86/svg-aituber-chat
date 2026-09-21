@@ -122,6 +122,16 @@ export function StreamSettingsPanel({
         </label>
         <p className="notice">演出の種類は「設定 → アドバンスド演出」で選択します。発話中は既存の口パクと音声連動グローがそのまま動作します。</p>
 
+        <label className="check-field stream-effect-toggle">
+          <input
+            type="checkbox"
+            checked={stream.commentReactions}
+            onChange={(event) => onUpdate({ commentReactions: event.target.checked })}
+          />
+          <span>コメントのキーワードに反応する</span>
+        </label>
+        <p className="notice">「かわいい」「888」「草」などのコメントに、表情・ジェスチャー・パーティクルで反応します。</p>
+
         {cannotStartReason && !isEnabled && <p className="notice warning">{cannotStartReason}</p>}
         {error && <p className="notice warning">YouTube接続に失敗しました：{error}</p>}
 

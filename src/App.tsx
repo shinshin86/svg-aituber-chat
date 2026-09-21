@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChatPanel } from './components/ChatPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { StreamSettingsPanel } from './components/StreamSettingsPanel';
@@ -10,12 +10,20 @@ import { useSettings } from './hooks/useSettings';
 import { useVoiceTest } from './hooks/useVoiceTest';
 import { useYoutubeComments } from './hooks/useYoutubeComments';
 import { LLM_PROVIDERS, TTS_ENGINES } from './lib/providerCatalog';
+import { resolveCommentReaction } from './lib/commentReactions';
+import type { CommentReactionEvent } from './components/SvgAvatar';
 
 type Tab = 'chat' | 'settings' | 'stream';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('chat');
   const [avatarEffectReplayToken, setAvatarEffectReplayToken] = useState(0);
+  const [commentReaction, setCommentReaction] = useState<CommentReactionEvent | null>(null);
+  const [patternText, setPatternText] = useState<{ text: string; token: number } | null>(() => {
+    const debugComment = new URLSearchParams(window.location.search).get('comment');
+    return debugComment ? { text: debugComment, token: Date.now() } : null;
+  });
+  const debugCommentTriggeredRef = useRef(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const settingsState = useSettings();
   const audio = useAudioLipsync();
@@ -25,15 +33,21 @@ export default function App() {
     onAudioPlay: audio.play,
   });
 
-  const handleYouTubeCommentSelected = useCallback(() => {
+  const handleYouTubeCommentSelected = useCallback((comment: { userComment: string }) => {
+    setPatternText({ text: comment.userComment, token: Date.now() });
     if (
       settingsState.settings.stream.playAvatarEffectOnComment &&
       settingsState.settings.avatar.reveal !== 'none'
     ) {
       setAvatarEffectReplayToken((current) => current + 1);
     }
+    if (settingsState.settings.stream.commentReactions) {
+      const reaction = resolveCommentReaction(comment.userComment);
+      if (reaction) setCommentReaction({ ...reaction, token: Date.now() });
+    }
   }, [
     settingsState.settings.avatar.reveal,
+    settingsState.settings.stream.commentReactions,
     settingsState.settings.stream.playAvatarEffectOnComment,
   ]);
 
@@ -44,6 +58,16 @@ export default function App() {
     processChat: core.processChat,
     onCommentSelected: handleYouTubeCommentSelected,
   });
+
+  useEffect(() => {
+    const text = new URLSearchParams(window.location.search).get('comment');
+    if (!text || debugCommentTriggeredRef.current) return;
+    const timer = window.setTimeout(() => {
+      debugCommentTriggeredRef.current = true;
+      handleYouTubeCommentSelected({ userComment: text });
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [handleYouTubeCommentSelected]);
 
   const youtube = useYoutubeComments({
     youtubeLiveId: settingsState.settings.stream.youtubeLiveId,
@@ -83,13 +107,14 @@ export default function App() {
     const debugWindow = window as typeof window & {
       __svgAituberTest?: {
         playTestAudio: () => Promise<void>;
-        getAudioState: () => { mouthOpen: number; isSpeaking: boolean; rms: number };
+        getAudioState: () => { mouthOpen: number; mouthWidth: number; isSpeaking: boolean; rms: number };
       };
     };
     debugWindow.__svgAituberTest = {
       playTestAudio: voiceTest.testVoice,
       getAudioState: () => ({
         mouthOpen: audio.mouthOpen,
+        mouthWidth: audio.mouthWidth,
         isSpeaking: audio.isSpeaking,
         rms: audio.rms,
       }),
@@ -97,7 +122,7 @@ export default function App() {
     return () => {
       delete debugWindow.__svgAituberTest;
     };
-  }, [audio.isSpeaking, audio.mouthOpen, audio.rms, voiceTest.testVoice]);
+  }, [audio.isSpeaking, audio.mouthOpen, audio.mouthWidth, audio.rms, voiceTest.testVoice]);
 
   const llmLabel =
     LLM_PROVIDERS.find((item) => item.value === settingsState.settings.llm.provider)?.label ??
@@ -116,10 +141,14 @@ export default function App() {
       : core.configurationMessage
         ? '設定待ち'
         : '待機中';
+  const debugBackground = new URLSearchParams(window.location.search).get('bg');
+  const background = ['white', 'dark', 'green'].includes(debugBackground || '')
+    ? debugBackground
+    : settingsState.settings.avatar.background;
 
   return (
     <div className={`app-shell ${isPanelCollapsed ? 'panel-collapsed' : ''}`}>
-      <main className={`stage background-${settingsState.settings.avatar.background} mood-${settingsState.settings.avatar.colorMood}`}>
+      <main className={`stage background-${background} mood-${settingsState.settings.avatar.colorMood}`}>
         <header className="stage-header">
           <div className="brand-mark">AO</div>
           <div>
@@ -136,8 +165,13 @@ export default function App() {
         <SvgAvatar
           settings={settingsState.settings.avatar}
           mouthOpen={audio.mouthOpen}
+          mouthWidth={audio.mouthWidth}
           isSpeaking={audio.isSpeaking}
+          thinking={core.isProcessing}
+          emotion={core.emotion}
           effectReplayToken={avatarEffectReplayToken}
+          commentReaction={commentReaction}
+          patternText={patternText}
         />
 
         <div className="voice-meter" aria-label={`音声レベル ${Math.round(audio.mouthOpen * 100)}%`}>

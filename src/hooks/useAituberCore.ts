@@ -6,6 +6,7 @@ import {
 } from '@aituber-onair/core';
 import { buildVoiceOptions } from '../lib/coreOptions';
 import { isApiKeyOptional } from '../lib/providerCatalog';
+import { extractEmotion } from '../lib/emotion';
 import type { ChatMessage } from '../types/chat';
 import type { AppSettings } from '../types/settings';
 
@@ -59,6 +60,7 @@ export function useAituberCore({
   const [partialResponse, setPartialResponse] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [speechActive, setSpeechActive] = useState(false);
+  const [emotion, setEmotion] = useState<ReturnType<typeof extractEmotion>>('neutral');
   const [error, setError] = useState('');
   const [configurationMessage, setConfigurationMessage] = useState('');
 
@@ -121,6 +123,11 @@ export function useAituberCore({
 
     if (historyRef.current.length) core.setChatHistory(historyRef.current);
     setConfigurationMessage('');
+    let emotionResetTimer: ReturnType<typeof setTimeout> | undefined;
+    const updateEmotion = (data: unknown) => {
+      if (emotionResetTimer) clearTimeout(emotionResetTimer);
+      setEmotion(extractEmotion(data));
+    };
 
     core.on(AITuberOnAirCoreEvent.PROCESSING_START, () => {
       setError('');
@@ -129,8 +136,15 @@ export function useAituberCore({
     });
     core.on(AITuberOnAirCoreEvent.ASSISTANT_PARTIAL, (data: unknown) => {
       setPartialResponse(eventText(data));
+      if (
+        (typeof data === 'string' && /\[[a-z]+\]/i.test(data)) ||
+        (data && typeof data === 'object' && 'screenplay' in data)
+      ) {
+        updateEmotion(data);
+      }
     });
     core.on(AITuberOnAirCoreEvent.ASSISTANT_RESPONSE, (data: unknown) => {
+      updateEmotion(data);
       const content = eventText(data);
       if (content) {
         setMessages((current) => [
@@ -144,18 +158,21 @@ export function useAituberCore({
       setIsProcessing(false);
       setPartialResponse('');
     });
-    core.on(AITuberOnAirCoreEvent.SPEECH_START, () => {
+    core.on(AITuberOnAirCoreEvent.SPEECH_START, (data: unknown) => {
+      updateEmotion(data);
       setSpeechActive(true);
       callbackRef.current.onSpeechStart?.();
     });
     core.on(AITuberOnAirCoreEvent.SPEECH_END, () => {
       setSpeechActive(false);
       callbackRef.current.onSpeechEnd?.();
+      emotionResetTimer = setTimeout(() => setEmotion('neutral'), 1600);
     });
     core.on(AITuberOnAirCoreEvent.ERROR, (caught: unknown) => {
       setError(errorText(caught));
       setIsProcessing(false);
       setSpeechActive(false);
+      setEmotion('neutral');
       callbackRef.current.onSpeechEnd?.();
     });
 
@@ -164,6 +181,7 @@ export function useAituberCore({
       historyRef.current = core.getChatHistory();
       core.offAll();
       if (coreRef.current === core) coreRef.current = null;
+      if (emotionResetTimer) clearTimeout(emotionResetTimer);
     };
   }, [createId, settings.llm, settings.tts]);
 
@@ -211,6 +229,7 @@ export function useAituberCore({
     partialResponse,
     isProcessing,
     speechActive,
+    emotion,
     error,
     configurationMessage,
     processChat,

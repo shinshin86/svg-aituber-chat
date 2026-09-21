@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useVoiceOptions } from '../hooks/useVoiceOptions';
 import { LLM_PROVIDERS, TTS_ENGINES, supportsAudioLipSync } from '../lib/providerCatalog';
-import type { AppSettings, LlmProvider, TtsEngine, TtsProfile } from '../types/settings';
+import type { AppSettings, AvatarSettings, LlmProvider, TtsEngine, TtsProfile } from '../types/settings';
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -270,7 +270,7 @@ export function SettingsPanel({
         <div className="settings-group">
           {([
             ['breath', '呼吸'], ['headSway', '首の揺れ'], ['hairSway', '髪の揺れ'],
-            ['blink', 'まばたき'], ['mouseFollow', 'マウス追従'], ['debug', 'デバッグ表示'],
+            ['blink', 'まばたき'], ['mouseFollow', 'マウス追従'], ['debug', 'デバッグ表示'], ['emotionSync', '感情連動表情'], ['autoGesture', '自動ジェスチャー'],
           ] as const).map(([key, label]) => (
             <label className="check-field" key={key}>
               <input type="checkbox" checked={settings.avatar[key]} onChange={(event) => onUpdateAvatar({ [key]: event.target.checked })} />
@@ -311,6 +311,9 @@ export function SettingsPanel({
               <option value="monochrome">モノクロ</option>
               <option value="lineArt">線画</option>
               <option value="neon">ネオン</option>
+              <option value="poster">ポスター</option>
+              <option value="halftone">ハーフトーン</option>
+              <option value="duotone">デュオトーン</option>
             </select>
           </label>
           <label className="field">
@@ -329,12 +332,63 @@ export function SettingsPanel({
             <small>キャラクターと背景の色調を同時に切り替えます。</small>
           </label>
           <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.textPattern} onChange={(event) => onUpdateAvatar({ textPattern: event.target.checked })} />
+            <span>コメント文字パターン</span>
+          </label>
+          <label className="check-field">
             <input
               type="checkbox"
               checked={settings.avatar.audioGlow}
               onChange={(event) => onUpdateAvatar({ audioGlow: event.target.checked })}
             />
             <span>音声連動アウトライングロー</span>
+          </label>
+          <label className="field">
+            <span>白フチ</span>
+            <select value={settings.avatar.outline} onChange={(event) => onUpdateAvatar({ outline: event.target.value as AppSettings['avatar']['outline'] })}>
+              <option value="none">なし</option>
+              <option value="sticker">ステッカー</option>
+            </select>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.rimLight} onChange={(event) => onUpdateAvatar({ rimLight: event.target.checked })} />
+            <span>リムライト</span>
+          </label>
+          <label className="field">
+            <span>背後オーラ</span>
+            <select value={settings.avatar.aura} onChange={(event) => onUpdateAvatar({ aura: event.target.value as AvatarSettings['aura'] })}>
+              <option value="none">なし</option>
+              <option value="glow">グロー</option>
+              <option value="flame">炎</option>
+            </select>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.voiceEcho} onChange={(event) => onUpdateAvatar({ voiceEcho: event.target.checked })} />
+            <span>音量連動シルエットエコー</span>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.silhouetteCache} onChange={(event) => onUpdateAvatar({ silhouetteCache: event.target.checked })} />
+            <span>背面演出を軽量化（シルエットキャッシュ）</span>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.dropShadow} onChange={(event) => onUpdateAvatar({ dropShadow: event.target.checked })} />
+            <span>シルエットの影</span>
+          </label>
+          <label className="field range-field">
+            <span>髪色シフト <b>{settings.avatar.hairHueShift}°</b></span>
+            <input type="range" min="-180" max="180" step="1" value={settings.avatar.hairHueShift} onChange={(event) => onUpdateAvatar({ hairHueShift: Number(event.target.value) })} />
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.emotionParticles} onChange={(event) => onUpdateAvatar({ emotionParticles: event.target.checked })} />
+            <span>感情パーティクル</span>
+          </label>
+          <label className="field">
+            <span>背景演出</span>
+            <select value={settings.avatar.backdrop} onChange={(event) => onUpdateAvatar({ backdrop: event.target.value as AppSettings['avatar']['backdrop'] })}>
+              <option value="none">なし</option>
+              <option value="focusLines">集中線</option>
+              <option value="halftone">ハーフトーン</option>
+            </select>
           </label>
           <label className="check-field">
             <input
@@ -357,6 +411,19 @@ export function SettingsPanel({
             </select>
           </label>
           <label className="field">
+            <span>手描き風のぷるぷる線</span>
+            <select
+              aria-label="手描き風のぷるぷる線"
+              value={settings.avatar.wobble}
+              onChange={(event) => onUpdateAvatar({ wobble: event.target.value as AppSettings['avatar']['wobble'] })}
+            >
+              <option value="none">なし</option>
+              <option value="full">全身</option>
+              <option value="edge">輪郭のみ</option>
+            </select>
+            <small>輪郭の揺らぎは軽い更新間隔で動作します。</small>
+          </label>
+          <label className="field">
             <span>キャラクター内の模様</span>
             <select
               aria-label="キャラクター内の模様"
@@ -370,6 +437,19 @@ export function SettingsPanel({
             </select>
           </label>
           <label className="field">
+            <span>髪の模様</span>
+            <select
+              aria-label="髪の模様"
+              value={settings.avatar.hairPattern}
+              onChange={(event) => onUpdateAvatar({ hairPattern: event.target.value as AppSettings['avatar']['hairPattern'] })}
+            >
+              <option value="none">なし</option>
+              <option value="stars">星空ドット</option>
+              <option value="stripes">流れる光の筋</option>
+              <option value="hologram">ホログラム</option>
+            </select>
+          </label>
+          <label className="field">
             <span>登場・切替演出</span>
             <select
               aria-label="登場・切替演出"
@@ -380,6 +460,7 @@ export function SettingsPanel({
               <option value="wipe">マスクワイプ</option>
               <option value="iris">円形アイリス</option>
               <option value="draw">線描から登場</option>
+              <option value="dissolve">ディゾルブ</option>
             </select>
           </label>
           <button

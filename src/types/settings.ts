@@ -70,13 +70,18 @@ export interface StreamSettings {
   youtubeEnabled: boolean;
   youtubeCommentIntervalMs: number;
   playAvatarEffectOnComment: boolean;
+  commentReactions: boolean;
 }
 
-export type AvatarVisualMode = 'normal' | 'monochrome' | 'lineArt' | 'neon';
+export type AvatarVisualMode = 'normal' | 'monochrome' | 'lineArt' | 'neon' | 'poster' | 'halftone' | 'duotone';
 export type AvatarColorMood = 'neutral' | 'happy' | 'calm' | 'dramatic' | 'dreamy';
 export type AvatarDistortion = 'none' | 'cyber' | 'water';
 export type AvatarPattern = 'none' | 'aurora' | 'scanlines' | 'dots';
-export type AvatarReveal = 'none' | 'wipe' | 'iris' | 'draw';
+export type AvatarReveal = 'none' | 'wipe' | 'iris' | 'draw' | 'dissolve';
+export type AvatarBackdrop = 'none' | 'focusLines' | 'halftone';
+export type AvatarWobble = 'none' | 'full' | 'edge';
+export type AvatarHairPattern = 'none' | 'stars' | 'stripes' | 'hologram';
+export type AvatarAura = 'none' | 'glow' | 'flame';
 
 export interface AvatarSettings {
   background: 'white' | 'dark' | 'green';
@@ -86,16 +91,30 @@ export interface AvatarSettings {
   blink: boolean;
   mouseFollow: boolean;
   debug: boolean;
+  emotionSync: boolean;
+  autoGesture: boolean;
   amplitude: number;
   speed: number;
   visualMode: AvatarVisualMode;
   colorMood: AvatarColorMood;
   audioGlow: boolean;
+  outline: 'none' | 'sticker';
+  rimLight: boolean;
+  aura: AvatarAura;
+  voiceEcho: boolean;
+  silhouetteCache: boolean;
+  dropShadow: boolean;
   glitch: boolean;
   distortion: AvatarDistortion;
   pattern: AvatarPattern;
   reveal: AvatarReveal;
   effectIntensity: number;
+  hairHueShift: number;
+  emotionParticles: boolean;
+  backdrop: AvatarBackdrop;
+  wobble: AvatarWobble;
+  hairPattern: AvatarHairPattern;
+  textPattern: boolean;
 }
 
 export interface AppSettings {
