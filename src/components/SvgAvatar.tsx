@@ -10,6 +10,7 @@ interface AvatarController {
   setEmotion: (emotion: string) => void;
   playGesture: (name: string) => void;
   playParticles: (kind: 'heart' | 'star' | 'petal' | 'clap') => void;
+  playReactionPreset: (name: string, force?: boolean) => void;
   setThinking: (value: boolean) => void;
   setOptions: (options: Record<string, number | boolean>) => void;
   setEffects: (settings: AvatarSettings) => void;
@@ -20,6 +21,7 @@ interface AvatarController {
 
 export interface CommentReactionEvent extends CommentReaction {
   token: number;
+  preview?: boolean;
 }
 
 interface SvgAvatarProps {
@@ -119,8 +121,15 @@ export function SvgAvatar({ settings, mouthOpen, mouthWidth, isSpeaking, thinkin
     if (!controller) return;
     if (commentReactionTimerRef.current !== null) window.clearTimeout(commentReactionTimerRef.current);
     if (commentReaction.emotion) controller.setEmotion(commentReaction.emotion);
-    if (commentReaction.gesture) controller.playGesture(commentReaction.gesture);
-    if (commentReaction.particles) controller.playParticles(commentReaction.particles);
+    // A preset already includes its own gesture and particles. Playing the
+    // comment's gesture first would block the preset's (e.g. nod vs. jump).
+    const usePreset = Boolean(commentReaction.preset) && (commentReaction.preview || latestSettingsRef.current.reactionPresets);
+    if (usePreset && commentReaction.preset) {
+      controller.playReactionPreset(commentReaction.preset, commentReaction.preview);
+    } else {
+      if (commentReaction.gesture) controller.playGesture(commentReaction.gesture);
+      if (commentReaction.particles) controller.playParticles(commentReaction.particles);
+    }
     if (commentReaction.emotion) {
       commentReactionTimerRef.current = window.setTimeout(() => {
         controllerRef.current?.setEmotion('neutral');

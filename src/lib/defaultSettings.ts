@@ -90,6 +90,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     wobble: 'none',
     hairPattern: 'none',
     textPattern: false,
+    reactionPresets: true,
+    keepFaceOnReaction: true,
+    thinkingEffect: true,
+    voiceAccents: true,
   },
   stream: {
     youtubeApiKey: '',

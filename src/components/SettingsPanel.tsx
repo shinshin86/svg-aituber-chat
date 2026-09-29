@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useVoiceOptions } from '../hooks/useVoiceOptions';
 import { LLM_PROVIDERS, TTS_ENGINES, supportsAudioLipSync } from '../lib/providerCatalog';
-import type { AppSettings, AvatarSettings, LlmProvider, TtsEngine, TtsProfile } from '../types/settings';
+import type { AppSettings, AvatarReactionPreset, AvatarSettings, LlmProvider, TtsEngine, TtsProfile } from '../types/settings';
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -13,6 +13,7 @@ interface SettingsPanelProps {
   onUpdateTtsProfile: (engine: TtsEngine, patch: Partial<TtsProfile>) => void;
   onUpdateAvatar: (patch: Partial<AppSettings['avatar']>) => void;
   onReplayAvatarEffect: () => void;
+  onPreviewReaction: (preset: AvatarReactionPreset) => void;
   onTestAudio: () => Promise<void>;
   isTestingAudio: boolean;
   testAudioError: string;
@@ -68,6 +69,7 @@ export function SettingsPanel({
   onUpdateTtsProfile,
   onUpdateAvatar,
   onReplayAvatarEffect,
+  onPreviewReaction,
   onTestAudio,
   isTestingAudio,
   testAudioError,
@@ -483,6 +485,46 @@ export function SettingsPanel({
               onChange={(event) => onUpdateAvatar({ effectIntensity: Number(event.target.value) })}
             />
           </label>
+        </div>
+      </details>
+
+      <details data-testid="reaction-effects" open>
+        <summary>リアクション演出</summary>
+        <div className="settings-group reaction-effects-group">
+          <p className="notice">顔の表情は変えず、漫符・カメラ・背景・パーティクルを組み合わせた短い演出です。</p>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.reactionPresets} onChange={(event) => onUpdateAvatar({ reactionPresets: event.target.checked })} />
+            <span>感情・コメントにプリセットを連動</span>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.keepFaceOnReaction} onChange={(event) => onUpdateAvatar({ keepFaceOnReaction: event.target.checked })} />
+            <span>リアクション中は通常の顔を保つ</span>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.thinkingEffect} onChange={(event) => onUpdateAvatar({ thinkingEffect: event.target.checked })} />
+            <span>考え中バブル</span>
+          </label>
+          <label className="check-field">
+            <input type="checkbox" checked={settings.avatar.voiceAccents} onChange={(event) => onUpdateAvatar({ voiceAccents: event.target.checked })} />
+            <span>発話開始・音量ピークの波紋</span>
+          </label>
+          <div className="reaction-preview-grid" aria-label="リアクションプリセットのプレビュー">
+            {([
+              ['surprise', 'びっくり'],
+              ['shy', '照れる'],
+              ['laugh', '爆笑'],
+              ['thinking', '考え中'],
+              ['angry', '怒る'],
+              ['gloomy', 'しょんぼり'],
+              ['relaxed', 'リラックス'],
+              ['celebrate', 'お祝い'],
+              ['welcome', '初見歓迎'],
+            ] as const).map(([preset, label]) => (
+              <button className="reaction-preview-button" type="button" key={preset} onClick={() => onPreviewReaction(preset)}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </details>
 
