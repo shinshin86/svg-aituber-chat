@@ -82,6 +82,16 @@ export type AvatarBackdrop = 'none' | 'focusLines' | 'halftone';
 export type AvatarWobble = 'none' | 'full' | 'edge';
 export type AvatarHairPattern = 'none' | 'stars' | 'stripes' | 'hologram';
 export type AvatarAura = 'none' | 'glow' | 'flame';
+export type AvatarReactionPreset =
+  | 'surprise'
+  | 'shy'
+  | 'laugh'
+  | 'thinking'
+  | 'angry'
+  | 'gloomy'
+  | 'relaxed'
+  | 'celebrate'
+  | 'welcome';
 
 export interface AvatarSettings {
   background: 'white' | 'dark' | 'green';
@@ -115,6 +125,10 @@ export interface AvatarSettings {
   wobble: AvatarWobble;
   hairPattern: AvatarHairPattern;
   textPattern: boolean;
+  reactionPresets: boolean;
+  keepFaceOnReaction: boolean;
+  thinkingEffect: boolean;
+  voiceAccents: boolean;
 }
 
 export interface AppSettings {

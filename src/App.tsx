@@ -12,6 +12,7 @@ import { useYoutubeComments } from './hooks/useYoutubeComments';
 import { LLM_PROVIDERS, TTS_ENGINES } from './lib/providerCatalog';
 import { resolveCommentReaction } from './lib/commentReactions';
 import type { CommentReactionEvent } from './components/SvgAvatar';
+import type { AvatarReactionPreset } from './types/settings';
 
 type Tab = 'chat' | 'settings' | 'stream';
 
@@ -167,7 +168,7 @@ export default function App() {
           mouthOpen={audio.mouthOpen}
           mouthWidth={audio.mouthWidth}
           isSpeaking={audio.isSpeaking}
-          thinking={core.isProcessing}
+          thinking={core.isProcessing && !core.partialResponse}
           emotion={core.emotion}
           effectReplayToken={avatarEffectReplayToken}
           commentReaction={commentReaction}
@@ -229,6 +230,7 @@ export default function App() {
             onUpdateTtsProfile={settingsState.updateTtsProfile}
             onUpdateAvatar={settingsState.updateAvatar}
             onReplayAvatarEffect={() => setAvatarEffectReplayToken((current) => current + 1)}
+            onPreviewReaction={(preset: AvatarReactionPreset) => setCommentReaction({ preset, preview: true, token: Date.now() })}
             onTestAudio={voiceTest.testVoice}
             isTestingAudio={voiceTest.isTesting}
             testAudioError={voiceTest.error}

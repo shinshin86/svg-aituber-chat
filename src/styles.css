@@ -153,6 +153,14 @@ button { color: inherit; }
 .effect-draw.is-running {
   animation: avatar-line-draw 1s cubic-bezier(.16,.72,.18,1) both;
 }
+.effect-thinking {
+  transform-box: fill-box;
+  transform-origin: 0% 100%;
+}
+.effect-thinking.is-bursting { animation: thinking-bubble-burst .95s cubic-bezier(.2,.9,.25,1) both; }
+.effect-thinking .thinking-dot { animation: thinking-dot 1.2s ease-in-out infinite; }
+.effect-thinking .thinking-dot-2 { animation-delay: .16s; }
+.effect-thinking .thinking-dot-3 { animation-delay: .32s; }
 .avatar-error { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); color: #b42335; }
 .debug-only { display: none; }
 svg.debug .debug-only { display: inline; }
@@ -305,6 +313,22 @@ svg.debug .debug-only { display: inline; }
 .settings-panel summary::after { content: "+"; float: right; color: #a1a6b0; font-size: 16px; font-weight: 400; }
 .settings-panel details[open] summary::after { content: "−"; }
 .settings-group { display: grid; gap: 12px; padding: 0 2px 18px; }
+.reaction-preview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.reaction-preview-button {
+  min-height: 36px;
+  padding: 7px 5px;
+  border: 1px solid #e4d9dd;
+  border-radius: 9px;
+  color: #704553;
+  background: linear-gradient(145deg, #fff, #fff4f7);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 750;
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.reaction-preview-button:hover { transform: translateY(-1px); border-color: #ff9caf; box-shadow: 0 6px 14px rgba(255,82,111,.1); }
+.reaction-preview-button:active { transform: translateY(1px); }
+.reaction-preview-button:focus-visible { outline: 3px solid rgba(255,101,119,.18); outline-offset: 2px; }
 .field { display: grid; gap: 5px; }
 .field > span { color: #565d6d; font-size: 10px; font-weight: 700; }
 .field > span b { float: right; color: #ff6577; }
@@ -437,11 +461,20 @@ svg.debug .debug-only { display: inline; }
   90% { transform: translate(calc(3px * var(--effect-intensity, 1)), 0); opacity: .30; }
 }
 @keyframes avatar-line-draw { to { stroke-dashoffset: 0; } }
+@keyframes thinking-bubble-burst {
+  0% { opacity: 0; transform: scale(.4); }
+  22% { opacity: 1; transform: scale(1.08); }
+  34%, 78% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.94) translateY(-10px); }
+}
+@keyframes thinking-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-14px); opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   .app-shell,
   .side-panel,
   .panel-visibility-toggle { transition: none; }
+  .effect-thinking.is-bursting,
+  .effect-thinking .thinking-dot { animation: none; }
 }
 
 @media (max-width: 820px) {

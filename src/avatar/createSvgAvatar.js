@@ -1,5 +1,7 @@
 import { rotateHue } from '../lib/avatarColor';
 import { DEFAULT_PATTERN_TEXT, formatPatternText } from '../lib/patternText';
+import { createReactionFx } from './reactionFx.js';
+import { REACTION_RECIPES } from './reactionRecipes.js';
 
 /*
  * SVG Avatar Demo
@@ -34,6 +36,10 @@ import { DEFAULT_PATTERN_TEXT, formatPatternText } from '../lib/patternText';
  *   ?textfx=1&ptext=こんにちは  Show a flowing text pattern
  *   ?emotion=happy|sad|angry|surprised|relaxed|neutral  Freeze expression
  *   ?comment=cute  Trigger one comment keyword reaction after startup
+ *   ?reaction=celebrate  Trigger a reaction preset after startup
+ *   ?rt=450       Freeze the reaction at 450ms (use with ?reaction)
+ *   ?rm=1         Preview reactions as with prefers-reduced-motion
+ *   ?voicefx=1     Trigger the voice accent rings after startup
  *   ?amp=0        Override the motion amplitude
  *   ?flat=1       Render the original SVG without splitting it
  */
@@ -981,6 +987,7 @@ function build({ W, H, paths }) {
   }
   const halftone = el('rect', { 'data-backdrop': 'halftone', x: 0, y: 0, width: W, height: H, fill: 'url(#fxHalftone)', opacity: '.5' });
   backdropGroup.append(focusLines, halftone);
+  const reactionBackdropGroup = el('g', { id: 'reactionBackdrop', display: 'none', 'pointer-events': 'none' });
 
   // The draw-on effect clones the group structure, removes fills, and animates
   // each path outline in sequence.
@@ -999,12 +1006,23 @@ function build({ W, H, paths }) {
   });
 
   const revealWrap = el('g', { id: 'effectRevealWrap', mask: 'url(#fxRevealMask)' });
-  revealWrap.append(backdropGroup, backgroundEffects, renderedEffects, drawOverlay);
+  revealWrap.append(backdropGroup, reactionBackdropGroup, backgroundEffects, renderedEffects, drawOverlay);
   svg.append(revealWrap);
   // Keep the one-shot shine outside the reveal mask so it remains visible at a fixed debug progress.
   svg.append(shineWrap);
   const particleGroup = el('g', { id: 'avatarParticles', 'pointer-events': 'none' });
-  svg.append(particleGroup);
+  const voiceAccentGroup = el('g', { id: 'voiceAccents', 'pointer-events': 'none' });
+  const reactionOverlayGroup = el('g', { id: 'reactionOverlays', 'pointer-events': 'none' });
+  const thinkingGroup = el('g', { id: 'thinkingEffect', class: 'effect-thinking', display: 'none', 'pointer-events': 'none' });
+  const thinkingBubble = el('g', { transform: 'translate(1510 205)' });
+  thinkingBubble.append(
+    el('rect', { x: 0, y: 0, width: 260, height: 126, rx: 58, fill: '#fff', stroke: '#69433c', 'stroke-width': 9 }),
+    el('circle', { cx: 28, cy: 142, r: 22, fill: '#fff', stroke: '#69433c', 'stroke-width': 8 }),
+    el('circle', { cx: 2, cy: 176, r: 12, fill: '#fff', stroke: '#69433c', 'stroke-width': 7 }),
+  );
+  [74, 130, 186].forEach((cx, index) => thinkingBubble.append(el('circle', { cx, cy: 64, r: 15, fill: '#ff6f8f', class: `thinking-dot thinking-dot-${index + 1}` })));
+  thinkingGroup.append(thinkingBubble);
+  svg.append(voiceAccentGroup, reactionOverlayGroup, thinkingGroup, particleGroup);
 
   // Debug overlays
   const dbg = el('g', { class: 'debug-only', fill: 'none', 'stroke-width': 3 });
@@ -1042,6 +1060,7 @@ function build({ W, H, paths }) {
       voiceEcho30,
       voiceEcho48,
       dropShadow,
+      backgroundEffects,
       renderedEffects,
       patternRect,
       halftoneRect,
@@ -1063,6 +1082,10 @@ function build({ W, H, paths }) {
       drawOverlay,
       revealWrap,
       backdropGroup,
+      reactionBackdropGroup,
+      reactionOverlayGroup,
+      thinkingGroup,
+      voiceAccentGroup,
       particleGroup,
       expression: createExpressionController(expressionRefs, state.emotion),
     },
@@ -1162,7 +1185,7 @@ function createExpressionController(expressionRefs, initialEmotion = 'neutral') 
 
 function createEffectController(svg, effects) {
   if (!effects) {
-    return { setEffects() {}, setEmotion() {}, setAudioLevel() {}, setPatternText() {}, playShine() {}, replayReveal() {}, destroy() {} };
+    return { setEffects() {}, setEmotion() {}, setAudioLevel() {}, setPatternText() {}, setThinking() {}, playReactionPreset() {}, playShine() {}, replayReveal() {}, destroy() {} };
   }
 
   let config = {
@@ -1170,6 +1193,7 @@ function createEffectController(svg, effects) {
     outline: 'none', rimLight: false, aura: 'none', voiceEcho: false, silhouetteCache: true, dropShadow: false,
     distortion: 'none', pattern: 'none', reveal: 'none', effectIntensity: 1, emotionSync: true,
     hairHueShift: 0, emotionParticles: false, backdrop: 'none', wobble: 'none', textPattern: false,
+    reactionPresets: true, keepFaceOnReaction: true, thinkingEffect: true, voiceAccents: true,
   };
   let emotion = state.emotion;
   let audioLevel = 0;
@@ -1192,6 +1216,9 @@ function createEffectController(svg, effects) {
   let echoFrameId = 0;
   let echoLevel = 0;
   let currentPatternText = DEFAULT_PATTERN_TEXT;
+  let voiceAccentFrameId = 0;
+  let lastVoiceAccentAt = -Infinity;
+  let wasSpeaking = false;
 
   const silhouetteSources = [effects.dropShadow, effects.auraUse, ...effects.flameOuterUses, ...effects.flameInnerUses, effects.voiceEcho14, effects.voiceEcho30, effects.voiceEcho48];
   const applySilhouetteSource = () => {
@@ -1475,6 +1502,100 @@ function createEffectController(svg, effects) {
     particleFrameId = requestAnimationFrame(frame);
   };
 
+  const reactionFx = createReactionFx({
+    svg,
+    W: effects.W,
+    H: effects.H,
+    back: effects.reactionBackdropGroup,
+    front: effects.reactionOverlayGroup,
+    cameraTargets: [effects.renderedEffects, effects.backgroundEffects],
+    pivot: { x: 1250, y: effects.H },
+    getIntensity: () => config.effectIntensity,
+    fixedTime: params.has('rt') ? Math.max(Number(params.get('rt')) || 0, 0) : null,
+  });
+
+  // The thinking bubble is a short burst, not a loading indicator: it waits a
+  // moment so quick replies never show it, then pops once and repeats only
+  // occasionally while the reply is still pending.
+  let thinkingActive = false;
+  let thinkingDelayTimerId = 0;
+  let thinkingRepeatTimerId = 0;
+  let thinkingHideTimerId = 0;
+  const hideThinking = () => {
+    window.clearTimeout(thinkingHideTimerId);
+    effects.thinkingGroup.setAttribute('display', 'none');
+    effects.thinkingGroup.classList.remove('is-bursting');
+  };
+  const burstThinking = () => {
+    hideThinking();
+    effects.thinkingGroup.setAttribute('display', 'inline');
+    void effects.thinkingGroup.getBoundingClientRect();
+    effects.thinkingGroup.classList.add('is-bursting');
+    thinkingHideTimerId = window.setTimeout(hideThinking, 950);
+  };
+  const setThinking = (value) => {
+    const active = Boolean(value) && Boolean(config.thinkingEffect);
+    if (active === thinkingActive) return;
+    thinkingActive = active;
+    window.clearTimeout(thinkingDelayTimerId);
+    window.clearInterval(thinkingRepeatTimerId);
+    if (!active) { hideThinking(); return; }
+    thinkingDelayTimerId = window.setTimeout(() => {
+      burstThinking();
+      thinkingRepeatTimerId = window.setInterval(burstThinking, 4200);
+    }, 700);
+  };
+
+  const playVoiceAccent = (strength = 1) => {
+    cancelAnimationFrame(voiceAccentFrameId);
+    effects.voiceAccentGroup.replaceChildren();
+    const rings = [0, 1, 2].map((index) => {
+      const node = el('ellipse', { cx: effects.W / 2, cy: effects.H * .48, rx: 330, ry: 410, fill: 'none', stroke: index % 2 ? '#ff90ae' : '#ffd98a', 'stroke-width': 14 - index * 2, opacity: 0 });
+      effects.voiceAccentGroup.append(node);
+      return node;
+    });
+    let startedAt = null;
+    const frame = (now) => {
+      if (startedAt === null) startedAt = now;
+      const elapsed = now - startedAt;
+      let active = false;
+      rings.forEach((node, index) => {
+        const progress = Math.min(Math.max((elapsed - index * 90) / 620, 0), 1);
+        if (progress < 1) active = true;
+        const scale = 1 + progress * (.32 + strength * .16);
+        node.setAttribute('transform', `translate(${effects.W / 2} ${effects.H * .48}) scale(${scale}) translate(${-effects.W / 2} ${-effects.H * .48})`);
+        node.setAttribute('opacity', String(Math.sin(progress * Math.PI) * (.55 - index * .1)));
+      });
+      if (active) voiceAccentFrameId = requestAnimationFrame(frame);
+      else effects.voiceAccentGroup.replaceChildren();
+    };
+    voiceAccentFrameId = requestAnimationFrame(frame);
+  };
+
+  let lastReactionName = '';
+  let lastReactionAt = -Infinity;
+  const playReactionPreset = (value, force = false) => {
+    if (!config.reactionPresets && !force) return;
+    const preset = ['surprise', 'shy', 'laugh', 'thinking', 'angry', 'gloomy', 'relaxed', 'celebrate', 'welcome'].includes(value) ? value : '';
+    if (!preset) return;
+    const now = performance.now();
+    if (!force && preset === lastReactionName && now - lastReactionAt < 180) return;
+    lastReactionName = preset;
+    lastReactionAt = now;
+    if (preset === 'thinking') {
+      burstThinking();
+      return;
+    }
+    // A flood of the same comment should not restart the reaction from its
+    // anticipation every time; let the running one reach its peak first.
+    const running = reactionFx.current();
+    if (!force && running?.name === preset && running.progress < .6) return;
+    reactionFx.play(REACTION_RECIPES[preset], preset, {
+      onShine: playShine,
+      onGesture: (name) => state.playGesture(name),
+    });
+  };
+
   const setEffects = (next) => {
     config = { ...config, ...next, effectIntensity: clamp(next.effectIntensity ?? config.effectIntensity, .25, 2) };
     applySilhouetteSource();
@@ -1486,7 +1607,9 @@ function createEffectController(svg, effects) {
     const auraParam = params.get('aura');
     const aura = auraParam === 'flame' ? 'flame' : auraParam && auraParam !== '0' ? 'glow' : (config.aura === true ? 'glow' : config.aura);
     const dropShadow = params.has('shadow') ? params.get('shadow') !== '0' : Boolean(config.dropShadow);
-    const expressionEmotion = config.emotionSync || params.has('emotion') ? emotion : 'neutral';
+    const expressionEmotion = config.keepFaceOnReaction
+      ? 'neutral'
+      : (config.emotionSync || params.has('emotion') ? emotion : 'neutral');
     effects.expression?.setEmotion(expressionEmotion);
     const requestedMood = params.get('mood') || (config.emotionSync ? EMOTION_MOODS[emotion] : config.colorMood);
     const mood = Object.prototype.hasOwnProperty.call(MOOD_MATRICES, requestedMood) ? requestedMood : 'neutral';
@@ -1576,18 +1699,23 @@ function createEffectController(svg, effects) {
     updateAudioGlow();
     updateVoiceEcho(mood);
     updateWobbleLoop(wobble, config.effectIntensity);
+    setThinking(state.thinking);
   };
 
   const setEmotion = (value) => {
     const previousEmotion = emotion;
     emotion = normalizeEmotion(value);
     svg.dataset.emotion = emotion;
-    effects.expression?.setEmotion(emotion);
+    effects.expression?.setEmotion(config.keepFaceOnReaction ? 'neutral' : emotion);
     if (config.autoGesture && previousEmotion !== 'happy' && emotion === 'happy') playShine();
     if (config.emotionParticles && emotion !== 'neutral') {
       if (emotion === 'happy') playParticles('heart');
       if (emotion === 'surprised') playParticles('star');
       if (emotion === 'angry') setBackdrop('focusLines');
+    }
+    if (config.reactionPresets && previousEmotion !== emotion) {
+      const preset = { happy: 'shy', sad: 'gloomy', angry: 'angry', surprised: 'surprise', relaxed: 'relaxed' }[emotion];
+      if (preset) playReactionPreset(preset);
     }
     setEffects(config);
   };
@@ -1658,6 +1786,8 @@ function createEffectController(svg, effects) {
     },
     setEmotion,
     setPatternText,
+    setThinking,
+    playReactionPreset,
     playParticles,
     playShine,
     setAudioLevel(value, isSpeaking) {
@@ -1665,6 +1795,12 @@ function createEffectController(svg, effects) {
       speaking = Boolean(isSpeaking);
       updateAudioGlow();
       updateVoiceEcho(config.emotionSync ? EMOTION_MOODS[emotion] : config.colorMood);
+      const now = performance.now();
+      if (config.voiceAccents && ((!wasSpeaking && speaking) || (speaking && audioLevel > .72 && now - lastVoiceAccentAt > 900))) {
+        lastVoiceAccentAt = now;
+        playVoiceAccent(Math.max(audioLevel, .45));
+      }
+      wasSpeaking = speaking;
     },
     replayReveal,
     destroy() {
@@ -1678,6 +1814,12 @@ function createEffectController(svg, effects) {
       echoFrameId = 0;
       cancelAnimationFrame(shineFrameId);
       shineRunId += 1;
+      reactionFx.destroy();
+      cancelAnimationFrame(voiceAccentFrameId);
+      window.clearTimeout(thinkingDelayTimerId);
+      window.clearInterval(thinkingRepeatTimerId);
+      hideThinking();
+      effects.voiceAccentGroup.replaceChildren();
       effects.particleGroup.replaceChildren();
     },
   };
@@ -1944,6 +2086,9 @@ export async function createSvgAvatar(container, srcUrl) {
     playParticles(kind) {
       effectController.playParticles(String(kind));
     },
+    playReactionPreset(name, force = false) {
+      effectController.playReactionPreset(String(name), Boolean(force));
+    },
     playShine() {
       effectController.playShine();
     },
@@ -1952,6 +2097,7 @@ export async function createSvgAvatar(container, srcUrl) {
     },
     setThinking(value) {
       state.setThinking(value);
+      effectController.setThinking(Boolean(value));
     },
     setOptions(options) {
       if (typeof options.amp === 'number') state.amp = options.amp;
@@ -1982,5 +2128,7 @@ export async function createSvgAvatar(container, srcUrl) {
   };
 
   window.__avatar = { controller, parts, counts, state };
+  if (params.has('reaction')) effectController.playReactionPreset(params.get('reaction'), true);
+  if (params.has('voicefx')) effectController.setAudioLevel(.9, true);
   return controller;
 }
